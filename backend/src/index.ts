@@ -61,9 +61,12 @@ app.use('/api', aiRoutes);
 // Initialize Socket.io for real-time syncing
 const io = new Server(server, {
   cors: {
-    origin: true, // dynamically reflect request origin
+    origin: '*',
     methods: ['GET', 'POST'],
   },
+  transports: ['websocket', 'polling'],
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 setupSocket(io, redisClient);

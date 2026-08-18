@@ -172,7 +172,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
       s.off("presence-update");
       s.disconnect();
     };
-  }, [documentId, editor]);
+  }, [documentId]);
 
   const onChange = () => {
     if (!socket || isApplyingRemote.current) return;

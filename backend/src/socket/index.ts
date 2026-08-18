@@ -74,8 +74,8 @@ export const setupSocket = (io: Server, redisClient: any) => {
       }
     });
 
-    socket.on('disconnect', () => {
-      console.log(`🔴 User disconnected: ${socket.id}`);
+    socket.on('disconnect', (reason) => {
+      console.log(`🔴 User disconnected: ${socket.id} (reason: ${reason})`);
       if (currentDocId && presenceMap[currentDocId]) {
         delete presenceMap[currentDocId][socket.id];
         broadcastPresence(io, currentDocId);

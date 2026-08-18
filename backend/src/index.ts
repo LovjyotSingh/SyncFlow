@@ -3,7 +3,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { setupSocket } from './socket';
+import { setupSocket } from './socket/index';
 import mongoose from 'mongoose';
 import { createClient } from 'redis';
 import authRoutes from './routes/auth';

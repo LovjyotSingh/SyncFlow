@@ -3,43 +3,127 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const router = Router();
 
+// Model: Gemini 3.7 Flash — Google's latest workhorse model (released Aug 2026)
+const GEMINI_MODEL = 'gemini-3.7-flash';
+
 const COMMANDS: Record<string, string> = {
-  summarize: 'Summarize the following document content into 3-5 concise bullet points. Be clear and direct. Output only the bullet points, no preamble.',
-  expand: 'Expand the following text with more detail, examples, and context. Keep the same professional tone. Output only the expanded text.',
-  grammar: 'Fix all grammar, spelling, and punctuation errors in the following text. Keep the meaning and structure identical. Output only the corrected text.',
-  suggest: 'Read the following document content and suggest 3-5 concrete next steps or improvements that would make this document more complete. Format as numbered list.',
-  shorten: 'Rewrite the following text to be more concise and impactful, cutting at least 30% of the words while keeping all key information. Output only the shortened text.',
-  tone: 'Rewrite the following text in a more professional and polished tone suitable for a business context. Output only the rewritten text.',
+  summarize: `You are an expert document analyst. Summarize the following document into 3-5 concise, insightful bullet points. 
+Start each bullet with "• ". Be clear, direct, and capture the most important ideas. Output only the bullet points, no preamble or conclusion.`,
+
+  expand: `You are an expert writer. Expand the following text with more detail, concrete examples, data, and rich context. 
+Preserve the original tone and structure. Make it at least 2x longer and significantly more informative. Output only the expanded text.`,
+
+  grammar: `You are a professional editor and proofreader. Fix all grammar, spelling, punctuation, and style errors in the following text. 
+Improve clarity and flow while keeping the meaning and structure identical. Output only the corrected text, nothing else.`,
+
+  suggest: `You are a strategic consultant. Read the following document and provide 5 concrete, actionable next steps or improvements. 
+Number each suggestion (1. 2. 3. ...). Be specific, practical, and add real value. Focus on what would make this document more complete and impactful.`,
+
+  shorten: `You are an expert at concise writing. Rewrite the following text to be dramatically more concise — cut at least 40% of words 
+while keeping ALL key information and impact. Eliminate filler words, redundancy, and fluff. Output only the shortened text.`,
+
+  tone: `You are a senior business writer. Rewrite the following text in a polished, professional tone appropriate for C-suite communication. 
+Keep all facts and meaning intact. Improve vocabulary, sentence structure, and executive presence. Output only the rewritten text.`,
+
+  translate_simple: `Translate the following text to simple, plain English that a 12-year-old could understand. 
+Replace jargon, complex terms, and long sentences with simple equivalents. Output only the translated text.`,
+
+  action_items: `You are a project manager. Extract all action items, tasks, and commitments from the following document. 
+Format as a checklist with [ ] prefix for each item. Group by owner if mentioned. Output only the action items checklist.`,
 };
 
+// POST /api/ai — Standard (non-streaming) for simple use
 router.post('/ai', async (req, res) => {
   try {
-    const { command, content, apiKey } = req.body;
+    const { command, content, apiKey, prompt: customPrompt } = req.body;
 
-    if (!command || !content) {
-      return res.status(400).json({ error: 'command and content are required' });
+    if (!content) {
+      return res.status(400).json({ error: 'content is required' });
     }
 
     const key = apiKey || process.env.GEMINI_API_KEY;
     if (!key) {
-      return res.status(400).json({ error: 'No Gemini API key provided. Add GEMINI_API_KEY to backend .env or pass it in the request.' });
+      return res.status(400).json({
+        error: 'No Gemini API key provided. Add GEMINI_API_KEY to your backend .env file or get one free at aistudio.google.com',
+      });
     }
 
-    const prompt = COMMANDS[command];
-    if (!prompt) {
+    const systemPrompt = command ? COMMANDS[command] : customPrompt;
+    if (!systemPrompt) {
       return res.status(400).json({ error: `Unknown command. Valid: ${Object.keys(COMMANDS).join(', ')}` });
     }
 
     const genAI = new GoogleGenerativeAI(key);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }); // Free tier
+    const model = genAI.getGenerativeModel({
+      model: GEMINI_MODEL,
+      systemInstruction: 'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
+    });
 
-    const result = await model.generateContent(`${prompt}\n\n---\n\n${content}`);
+    const result = await model.generateContent(`${systemPrompt}\n\n---\n\n${content}`);
     const text = result.response.text();
 
-    res.json({ result: text });
+    res.json({ result: text, model: GEMINI_MODEL });
   } catch (error: any) {
     console.error('Gemini AI error:', error.message);
-    res.status(500).json({ error: error.message || 'AI request failed' });
+    const msg = error.message?.includes('API_KEY_INVALID')
+      ? 'Invalid Gemini API key. Get a free one at aistudio.google.com'
+      : error.message?.includes('quota')
+      ? 'API quota exceeded. Try again later or upgrade your Gemini plan.'
+      : error.message || 'AI request failed';
+    res.status(500).json({ error: msg });
+  }
+});
+
+// POST /api/ai/stream — Streaming (Server-Sent Events) for real-time word-by-word output
+router.post('/ai/stream', async (req, res) => {
+  try {
+    const { command, content, apiKey, prompt: customPrompt } = req.body;
+
+    if (!content) {
+      res.status(400).json({ error: 'content is required' });
+      return;
+    }
+
+    const key = apiKey || process.env.GEMINI_API_KEY;
+    if (!key) {
+      res.status(400).json({ error: 'No Gemini API key. Add GEMINI_API_KEY to .env or pass apiKey in request.' });
+      return;
+    }
+
+    const systemPrompt = command ? COMMANDS[command] : customPrompt;
+    if (!systemPrompt) {
+      res.status(400).json({ error: `Unknown command. Valid: ${Object.keys(COMMANDS).join(', ')}` });
+      return;
+    }
+
+    // Set up Server-Sent Events (SSE)
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.flushHeaders();
+
+    const genAI = new GoogleGenerativeAI(key);
+    const model = genAI.getGenerativeModel({
+      model: GEMINI_MODEL,
+      systemInstruction: 'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
+    });
+
+    const streamResult = await model.generateContentStream(`${systemPrompt}\n\n---\n\n${content}`);
+
+    for await (const chunk of streamResult.stream) {
+      const text = chunk.text();
+      if (text) {
+        res.write(`data: ${JSON.stringify({ text })}\n\n`);
+      }
+    }
+
+    res.write('data: [DONE]\n\n');
+    res.end();
+  } catch (error: any) {
+    console.error('Gemini stream error:', error.message);
+    res.write(`data: ${JSON.stringify({ error: error.message || 'Stream failed' })}\n\n`);
+    res.end();
   }
 });
 

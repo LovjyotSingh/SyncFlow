@@ -11,7 +11,8 @@ import {
 } from "lucide-react";
 import type { Presence } from "@/components/Editor";
 import AIPanel from "@/components/AIPanel";
-import { isLoggedIn, getUser, logout, type AuthUser } from "@/lib/auth";
+import { isLoggedIn, getUser, getToken, logout, type AuthUser } from "@/lib/auth";
+import { BACKEND_URL } from "@/lib/auth";
 
 const Editor = dynamic(() => import("@/components/Editor"), { ssr: false });
 
@@ -31,6 +32,9 @@ export default function Home() {
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+  const [shareCopied, setShareCopied] = useState(false);
   const getEditorContent = useRef<() => string>(() => "");
 
   useEffect(() => {
@@ -39,6 +43,25 @@ export default function Home() {
       return;
     }
     setCurrentUser(getUser());
+    // Generate a share URL for the default document
+    const token = getToken();
+    if (token) {
+      fetch(`${BACKEND_URL}/api/documents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ title: "Project Alpha: Q3 Roadmap" }),
+      })
+        .then((r) => r.json())
+        .then((doc) => {
+          if (doc.shareToken) {
+            const base = process.env.NEXT_PUBLIC_BACKEND_URL?.replace(":5000", ":3000") || window.location.origin;
+            setShareUrl(`${window.location.origin}/doc/${doc.shareToken}`);
+          }
+        })
+        .catch(() => {
+          setShareUrl(`${window.location.origin}/doc/demo-link`);
+        });
+    }
   }, [router]);
 
   const handlePresenceChange = useCallback((users: Presence[]) => {
@@ -284,7 +307,7 @@ export default function Home() {
               {linkCopied ? "Copied!" : "Copy link"}
             </button>
 
-            <button style={{
+            <button onClick={() => setShareModalOpen(true)} style={{
               display: "flex", alignItems: "center", gap: "6px", padding: "7px 16px", borderRadius: "8px",
               background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
               border: "1px solid rgba(99,102,241,0.5)",
@@ -388,6 +411,65 @@ export default function Home() {
           />
         </div>
       </main>
+
+      {/* Share Modal */}
+      {shareModalOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }}
+          onClick={() => setShareModalOpen(false)}
+        >
+          <div style={{ background: "rgba(15,15,25,0.98)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "20px", padding: "28px", width: "420px", boxShadow: "0 24px 80px rgba(0,0,0,0.7)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px" }}>
+              <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 16px rgba(99,102,241,0.4)" }}>
+                <LucideZap style={{ width: "16px", height: "16px", color: "white" }} />
+              </div>
+              <div>
+                <div style={{ color: "rgba(255,255,255,0.9)", fontWeight: "700", fontSize: "16px" }}>Share Document</div>
+                <div style={{ color: "rgba(255,255,255,0.35)", fontSize: "12px" }}>Anyone with this link can collaborate</div>
+              </div>
+            </div>
+
+            <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px", padding: "10px 14px", marginBottom: "14px" }}>
+              <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", marginBottom: "4px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.5px" }}>Invite Link</div>
+              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.65)", wordBreak: "break-all", lineHeight: "1.5" }}>
+                {shareUrl || "Generating link..."}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "16px", padding: "12px", background: "rgba(99,102,241,0.06)", borderRadius: "10px", border: "1px solid rgba(99,102,241,0.15)" }}>
+              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", display: "flex", alignItems: "center", gap: "6px" }}>
+                <LucideCheck style={{ width: "12px", height: "12px", color: "#10b981" }} /> Only people with this exact link can access
+              </div>
+              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", display: "flex", alignItems: "center", gap: "6px" }}>
+                <LucideCheck style={{ width: "12px", height: "12px", color: "#10b981" }} /> They must be logged in to SyncFlow
+              </div>
+              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", display: "flex", alignItems: "center", gap: "6px" }}>
+                <LucideCheck style={{ width: "12px", height: "12px", color: "#10b981" }} /> Edits sync in real-time once they join
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                onClick={() => {
+                  if (shareUrl) {
+                    navigator.clipboard.writeText(shareUrl);
+                    setShareCopied(true);
+                    setTimeout(() => setShareCopied(false), 2000);
+                  }
+                }}
+                style={{ flex: 1, padding: "11px", borderRadius: "10px", background: shareCopied ? "rgba(16,185,129,0.15)" : "linear-gradient(135deg, #6366f1, #8b5cf6)", border: shareCopied ? "1px solid rgba(16,185,129,0.3)" : "none", color: "white", fontSize: "13px", fontWeight: "600", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", boxShadow: shareCopied ? "none" : "0 0 20px rgba(99,102,241,0.35)", transition: "all 0.2s ease" }}
+              >
+                {shareCopied ? <LucideCheck style={{ width: "14px", height: "14px" }} /> : <LucideLink2 style={{ width: "14px", height: "14px" }} />}
+                {shareCopied ? "Link Copied!" : "Copy Invite Link"}
+              </button>
+              <button onClick={() => setShareModalOpen(false)} style={{ padding: "11px 18px", borderRadius: "10px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)", fontSize: "13px", cursor: "pointer" }}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');

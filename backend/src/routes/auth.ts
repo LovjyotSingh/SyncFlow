@@ -20,6 +20,26 @@ function signToken(userId: string) {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '30d' });
 }
 
+// ─── Reusable auth middleware ─────────────────────────────────────────────────
+export interface AuthRequest extends Request {
+  userId?: string;
+}
+
+export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  try {
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+    req.userId = decoded.userId;
+    next();
+  } catch {
+    return res.status(401).json({ message: 'Invalid or expired token' });
+  }
+}
+
 // POST /api/auth/register
 router.post('/register', async (req: Request, res: Response) => {
   try {
@@ -76,17 +96,10 @@ router.post('/login', async (req: Request, res: Response) => {
 });
 
 // GET /api/auth/me  — validate token
-router.get('/me', async (req: Request, res: Response) => {
+router.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'Unauthorized' });
-    }
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-    const user = await User.findById(decoded.userId).select('-password');
+    const user = await User.findById(req.userId).select('-password');
     if (!user) return res.status(401).json({ message: 'User not found' });
-
     res.json({ user: { id: user._id, name: user.name, email: user.email, avatarColor: user.avatarColor } });
   } catch {
     res.status(401).json({ message: 'Invalid token' });

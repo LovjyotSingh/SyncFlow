@@ -127,4 +127,62 @@ router.post('/ai/stream', async (req, res) => {
   }
 });
 
+// POST /api/ai/chat/stream — Free-form conversational AI (code, explanations, anything)
+// Accepts: { message, history?: [{role, text}], apiKey? }
+router.post('/ai/chat/stream', async (req, res) => {
+  try {
+    const { message, history = [], apiKey } = req.body;
+
+    if (!message?.trim()) {
+      res.status(400).json({ error: 'message is required' });
+      return;
+    }
+
+    const key = apiKey || process.env.GEMINI_API_KEY;
+    if (!key) {
+      res.status(400).json({ error: 'No Gemini API key. Add GEMINI_API_KEY to .env or pass apiKey in request.' });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.flushHeaders();
+
+    const genAI = new GoogleGenerativeAI(key);
+    const model = genAI.getGenerativeModel({
+      model: GEMINI_MODEL,
+      systemInstruction:
+        'You are SyncFlow AI — a brilliant, versatile assistant embedded in a collaborative document editor. ' +
+        'You can write and explain code in any language, answer technical questions, write essays, ' +
+        'summarize topics, generate content, and help with anything the user asks. ' +
+        'Be concise but thorough. Use markdown formatting (code blocks, headers, bullet points) where it improves clarity.',
+    });
+
+    // Build conversation history for multi-turn context
+    const chatHistory = (history as { role: string; text: string }[]).map((msg) => ({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.text }],
+    }));
+
+    const chat = model.startChat({ history: chatHistory });
+    const streamResult = await chat.sendMessageStream(message);
+
+    for await (const chunk of streamResult.stream) {
+      const text = chunk.text();
+      if (text) {
+        res.write(`data: ${JSON.stringify({ text })}\n\n`);
+      }
+    }
+
+    res.write('data: [DONE]\n\n');
+    res.end();
+  } catch (error: any) {
+    console.error('Gemini chat error:', error.message);
+    res.write(`data: ${JSON.stringify({ error: error.message || 'Chat stream failed' })}\n\n`);
+    res.end();
+  }
+});
+
 export default router;

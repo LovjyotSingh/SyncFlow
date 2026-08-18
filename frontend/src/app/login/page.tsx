@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { login, register, isLoggedIn } from "@/lib/auth";
 import { LucideLoader2, LucideZap, LucideEye, LucideEyeOff } from "lucide-react";
 
-export default function LoginPage() {
+function LoginPageInner() {
   const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [name, setName] = useState("");
@@ -15,9 +15,12 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirect") || "/";
+
   useEffect(() => {
-    if (isLoggedIn()) router.replace("/");
-  }, [router]);
+    if (isLoggedIn()) router.replace(redirectTo);
+  }, [router, redirectTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +33,7 @@ export default function LoginPage() {
       } else {
         await login(email, password);
       }
-      router.replace("/");
+      router.replace(redirectTo);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -204,3 +207,11 @@ const inputStyle: React.CSSProperties = {
   fontSize: "14px", outline: "none",
   transition: "border-color 0.2s ease",
 };
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginPageInner />
+    </Suspense>
+  );
+}

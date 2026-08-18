@@ -36,6 +36,17 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const userName = useRef<string>("Guest");
 
+  // Keep latest callbacks in refs to avoid socket reconnect loops
+  const onPresenceChangeRef = useRef(onPresenceChange);
+  const onConnectionChangeRef = useRef(onConnectionChange);
+  const onChangeContentRef = useRef(onChangeContent);
+
+  useEffect(() => {
+    onPresenceChangeRef.current = onPresenceChange;
+    onConnectionChangeRef.current = onConnectionChange;
+    onChangeContentRef.current = onChangeContent;
+  });
+
   const editor = useCreateBlockNote();
 
   // Set real username from JWT on mount
@@ -96,21 +107,33 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
     },
   }));
 
+  // Stable Socket.io connection that only resets when documentId changes
   useEffect(() => {
     if (!documentId) return;
 
-    const s = io(BACKEND_URL, { transports: ["websocket", "polling"] });
+    const s = io(BACKEND_URL, {
+      transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionAttempts: 15,
+      reconnectionDelay: 1000,
+      timeout: 10000,
+    });
 
     s.on("connect", () => {
       setIsConnected(true);
-      onConnectionChange?.(true);
+      onConnectionChangeRef.current?.(true);
       // Join document with isolated document ID room
       s.emit("join-document", documentId, userName.current);
     });
 
-    s.on("disconnect", () => {
+    s.on("disconnect", (reason) => {
       setIsConnected(false);
-      onConnectionChange?.(false);
+      onConnectionChangeRef.current?.(false);
+    });
+
+    s.on("connect_error", () => {
+      setIsConnected(false);
+      onConnectionChangeRef.current?.(false);
     });
 
     // Load persisted document state when joining
@@ -135,14 +158,21 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
 
     // Receive presence updates
     s.on("presence-update", (users: Presence[]) => {
-      onPresenceChange?.(users);
+      onPresenceChangeRef.current?.(users);
     });
 
     setSocket(s);
+
     return () => {
+      s.off("connect");
+      s.off("disconnect");
+      s.off("connect_error");
+      s.off("load-document");
+      s.off("receive-changes");
+      s.off("presence-update");
       s.disconnect();
     };
-  }, [documentId, editor, onPresenceChange, onConnectionChange]);
+  }, [documentId, editor]);
 
   const onChange = () => {
     if (!socket || isApplyingRemote.current) return;
@@ -152,7 +182,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
       const text = editor.document
         .map((b) => (Array.isArray(b.content) ? b.content.map((c: any) => c.text || "").join("") : ""))
         .join("\n");
-      onChangeContent?.(text);
+      onChangeContentRef.current?.(text);
     } catch {}
 
     // Typing indicator: send typing=true, then stop after 1.5s of inactivity

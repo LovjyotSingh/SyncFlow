@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { isLoggedIn, getToken, BACKEND_URL } from "@/lib/auth";
-import { LucideLoader2, LucideShieldX, LucideSparkles } from "lucide-react";
+import { LucideLoader2, LucideShieldX, LucideSparkles, LucideChevronRight } from "lucide-react";
 import dynamic from "next/dynamic";
-import type { Presence } from "@/components/Editor";
+import type { Presence, EditorHandle } from "@/components/Editor";
 import AIPanel from "@/components/AIPanel";
-import { useCallback, useRef } from "react";
 
 const Editor = dynamic(() => import("@/components/Editor"), { ssr: false });
 
@@ -17,18 +16,19 @@ export default function SharedDocPage() {
   const token = params.token as string;
 
   const [status, setStatus] = useState<"loading" | "authorized" | "denied" | "notfound">("loading");
-  const [docTitle, setDocTitle] = useState("Shared Document");
+  const [docId, setDocId] = useState<string>("");
+  const [docTitle, setDocTitle] = useState("Shared Workspace");
   const [presence, setPresence] = useState<Presence[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
-  const getEditorContent = useRef<() => string>(() => "");
+
+  const editorRef = useRef<EditorHandle | null>(null);
 
   const handlePresenceChange = useCallback((users: Presence[]) => setPresence(users), []);
   const handleConnectionChange = useCallback((connected: boolean) => setIsConnected(connected), []);
 
   useEffect(() => {
     if (!isLoggedIn()) {
-      // Redirect to login, then back to this page after auth
       router.replace(`/login?redirect=/doc/${token}`);
       return;
     }
@@ -45,7 +45,8 @@ export default function SharedDocPage() {
         if (!res.ok) { setStatus("denied"); return; }
 
         const doc = await res.json();
-        setDocTitle(doc.title || "Shared Document");
+        setDocId(doc._id);
+        setDocTitle(doc.title || "Shared Workspace");
         setStatus("authorized");
       } catch {
         setStatus("denied");
@@ -61,7 +62,8 @@ export default function SharedDocPage() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#080810" }}>
         <div style={{ textAlign: "center" }}>
           <LucideLoader2 style={{ width: "28px", height: "28px", color: "#6366f1", margin: "0 auto 12px", animation: "spin 1s linear infinite" }} />
-          <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "14px" }}>Verifying access...</div>
+          <div style={{ color: "rgba(255,255,255,0.6)", fontSize: "14px", fontWeight: "500" }}>Verifying access to workspace...</div>
+          <div style={{ color: "rgba(255,255,255,0.3)", fontSize: "12px", marginTop: "4px" }}>Securing real-time collaboration channel</div>
         </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -71,27 +73,26 @@ export default function SharedDocPage() {
   // ── Access Denied / Not Found ────────────────────────────────────────────────
   if (status === "denied" || status === "notfound") {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#080810" }}>
-        <div style={{ textAlign: "center", padding: "40px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#080810", fontFamily: "'Inter', system-ui, sans-serif" }}>
+        <div style={{ textAlign: "center", padding: "40px", maxWidth: "420px" }}>
           <div style={{ width: "64px", height: "64px", borderRadius: "20px", background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
-            <LucideShieldX style={{ width: "28px", height: "28px", color: "rgba(244,63,94,0.7)" }} />
+            <LucideShieldX style={{ width: "28px", height: "28px", color: "rgba(244,63,94,0.8)" }} />
           </div>
-          <h1 style={{ color: "rgba(255,255,255,0.85)", fontSize: "22px", fontWeight: "700", marginBottom: "10px" }}>
-            {status === "notfound" ? "Link Not Found" : "Access Denied"}
+          <h1 style={{ color: "rgba(255,255,255,0.9)", fontSize: "22px", fontWeight: "700", marginBottom: "10px" }}>
+            {status === "notfound" ? "Workspace Not Found" : "Private Workspace"}
           </h1>
-          <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "14px", lineHeight: "1.6", maxWidth: "320px", margin: "0 auto 24px" }}>
+          <p style={{ color: "rgba(255,255,255,0.45)", fontSize: "14px", lineHeight: "1.6", marginBottom: "24px" }}>
             {status === "notfound"
-              ? "This invite link doesn't exist or has been removed by the owner."
-              : "You don't have permission to access this document. Ask the owner to share the correct link."}
+              ? "This invite link doesn't exist or has been deleted by the owner."
+              : "This workspace is strictly private. Only users who receive an invite link or direct invitation can view or edit this document."}
           </p>
           <button
             onClick={() => router.push("/")}
-            style={{ padding: "10px 24px", borderRadius: "10px", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", border: "none", color: "white", fontSize: "14px", fontWeight: "600", cursor: "pointer", boxShadow: "0 0 20px rgba(99,102,241,0.3)" }}
+            style={{ padding: "11px 24px", borderRadius: "10px", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", border: "none", color: "white", fontSize: "14px", fontWeight: "600", cursor: "pointer", boxShadow: "0 0 20px rgba(99,102,241,0.35)" }}
           >
-            Go to My Workspace
+            Back to My Workspace
           </button>
         </div>
-        <style>{`* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', system-ui, sans-serif; }`}</style>
       </div>
     );
   }
@@ -110,11 +111,11 @@ export default function SharedDocPage() {
         <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 28px", height: "56px", background: "rgba(8,8,16,0.7)", borderBottom: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(20px)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <div style={{ width: "28px", height: "28px", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "800", color: "white", boxShadow: "0 0 12px rgba(99,102,241,0.4)" }}>SF</div>
-            <span style={{ color: "rgba(255,255,255,0.6)", fontSize: "13px" }}>SyncFlow</span>
-            <span style={{ color: "rgba(255,255,255,0.2)", fontSize: "13px" }}>›</span>
-            <span style={{ color: "rgba(255,255,255,0.85)", fontSize: "13px", fontWeight: "500" }}>{docTitle}</span>
-            <span style={{ fontSize: "11px", padding: "2px 8px", borderRadius: "20px", background: "rgba(99,102,241,0.15)", color: "rgba(99,102,241,0.8)", border: "1px solid rgba(99,102,241,0.25)", fontWeight: "600" }}>
-              Shared
+            <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "13px" }}>Shared Workspace</span>
+            <LucideChevronRight style={{ width: "12px", height: "12px", color: "rgba(255,255,255,0.2)" }} />
+            <span style={{ color: "rgba(255,255,255,0.9)", fontSize: "13px", fontWeight: "600" }}>{docTitle}</span>
+            <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "20px", background: "rgba(99,102,241,0.15)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.25)", fontWeight: "600" }}>
+              Collaborator View
             </span>
           </div>
 
@@ -134,20 +135,23 @@ export default function SharedDocPage() {
             <div style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 10px", borderRadius: "20px", background: isConnected ? "rgba(16,185,129,0.08)" : "rgba(244,63,94,0.08)", border: `1px solid ${isConnected ? "rgba(16,185,129,0.2)" : "rgba(244,63,94,0.2)"}` }}>
               <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: isConnected ? "#10b981" : "#f43f5e", boxShadow: `0 0 6px ${isConnected ? "rgba(16,185,129,0.8)" : "rgba(244,63,94,0.8)"}` }} />
               <span style={{ fontSize: "11px", color: isConnected ? "rgba(16,185,129,0.8)" : "rgba(244,63,94,0.8)", fontWeight: "500" }}>
-                {isConnected ? "Live" : "Connecting..."}
+                {isConnected ? "Live Sync" : "Connecting..."}
               </span>
             </div>
 
             {/* AI button */}
             <button
               onClick={() => setAiPanelOpen(!aiPanelOpen)}
-              style={{ display: "flex", alignItems: "center", gap: "6px", padding: "7px 14px", borderRadius: "8px", background: aiPanelOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.07)", border: aiPanelOpen ? "1px solid rgba(99,102,241,0.4)" : "1px solid rgba(255,255,255,0.1)", color: aiPanelOpen ? "rgba(139,92,246,0.9)" : "rgba(255,255,255,0.7)", fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none", transition: "all 0.2s ease" }}
+              style={{ display: "flex", alignItems: "center", gap: "6px", padding: "7px 14px", borderRadius: "8px", background: aiPanelOpen ? "rgba(99,102,241,0.25)" : "rgba(255,255,255,0.07)", border: aiPanelOpen ? "1px solid rgba(99,102,241,0.4)" : "1px solid rgba(255,255,255,0.1)", color: aiPanelOpen ? "rgba(139,92,246,0.95)" : "rgba(255,255,255,0.75)", fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none", transition: "all 0.15s ease" }}
             >
               <LucideSparkles style={{ width: "13px", height: "13px" }} />
-              AI
+              Gemini AI
             </button>
 
-            <button onClick={() => router.push("/")} style={{ padding: "7px 14px", borderRadius: "8px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)", fontSize: "12px", cursor: "pointer", outline: "none" }}>
+            <button
+              onClick={() => router.push("/")}
+              style={{ padding: "7px 14px", borderRadius: "8px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)", fontSize: "12px", fontWeight: "500", cursor: "pointer", outline: "none" }}
+            >
               My Workspace
             </button>
           </div>
@@ -156,11 +160,11 @@ export default function SharedDocPage() {
         {/* Content */}
         <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
           <div style={{ flex: 1, overflowY: "auto", padding: "48px 40px" }}>
-            <div style={{ maxWidth: "760px", margin: "0 auto" }}>
+            <div style={{ maxWidth: "780px", margin: "0 auto" }}>
               <div style={{ marginBottom: "28px" }}>
                 <h1 style={{ fontSize: "38px", fontWeight: "800", color: "rgba(255,255,255,0.95)", letterSpacing: "-1px" }}>{docTitle}</h1>
-                <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.25)", marginTop: "8px" }}>
-                  Shared workspace · {presence.length} online · Changes sync in real-time
+                <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.3)", marginTop: "8px" }}>
+                  Shared collaborative space · {presence.length} active editor{presence.length !== 1 ? "s" : ""} · Real-time Redis state
                 </p>
               </div>
 
@@ -172,14 +176,21 @@ export default function SharedDocPage() {
                     <div style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#febc2e" }} />
                     <div style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#28c840" }} />
                     <div style={{ flex: 1, textAlign: "center" }}>
-                      <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.2)", fontWeight: "500" }}>syncflow · shared document</span>
+                      <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.2)", fontWeight: "500" }}>
+                        syncflow · shared channel ({docId.slice(-6)})
+                      </span>
                     </div>
                   </div>
                   <div style={{ padding: "24px 32px 32px" }} className="editor-dark-wrapper">
-                    <Editor
-                      onPresenceChange={handlePresenceChange}
-                      onConnectionChange={handleConnectionChange}
-                    />
+                    {docId && (
+                      <Editor
+                        key={docId}
+                        ref={editorRef}
+                        documentId={docId}
+                        onPresenceChange={handlePresenceChange}
+                        onConnectionChange={handleConnectionChange}
+                      />
+                    )}
                   </div>
                 </div>
               </div>
@@ -187,9 +198,10 @@ export default function SharedDocPage() {
           </div>
 
           <AIPanel
-            getEditorContent={getEditorContent.current}
+            getEditorContent={() => editorRef.current?.getText() || ""}
             isOpen={aiPanelOpen}
             onClose={() => setAiPanelOpen(false)}
+            onInsertContent={(text) => editorRef.current?.insertContent(text)}
           />
         </div>
       </main>

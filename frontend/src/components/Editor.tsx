@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from "react";
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { io, Socket } from "socket.io-client";
@@ -8,17 +8,27 @@ import { getUser } from "@/lib/auth";
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 
-const DOCUMENT_ID = "syncflow-alpha-room";
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
 export type Presence = { name: string; color: string; isTyping?: boolean };
 
-interface EditorProps {
-  onPresenceChange?: (users: Presence[]) => void;
-  onConnectionChange?: (connected: boolean) => void;
+export interface EditorHandle {
+  getText: () => string;
+  insertContent: (text: string) => void;
+  clearContent: () => void;
 }
 
-export default function Editor({ onPresenceChange, onConnectionChange }: EditorProps) {
+interface EditorProps {
+  documentId: string;
+  onPresenceChange?: (users: Presence[]) => void;
+  onConnectionChange?: (connected: boolean) => void;
+  onChangeContent?: (text: string) => void;
+}
+
+const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
+  { documentId, onPresenceChange, onConnectionChange, onChangeContent },
+  ref
+) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const isApplyingRemote = useRef(false);
@@ -34,14 +44,68 @@ export default function Editor({ onPresenceChange, onConnectionChange }: EditorP
     if (user) userName.current = user.name;
   }, []);
 
+  // Expose helper methods to parent (for AIPanel & More Options)
+  useImperativeHandle(ref, () => ({
+    getText: () => {
+      try {
+        return editor.document
+          .map((b) => {
+            if (Array.isArray(b.content)) {
+              return b.content.map((c: any) => c.text || "").join("");
+            }
+            return "";
+          })
+          .filter(Boolean)
+          .join("\n");
+      } catch {
+        return "";
+      }
+    },
+    insertContent: async (text: string) => {
+      if (!text?.trim()) return;
+      try {
+        const blocks = await editor.tryParseMarkdownToBlocks(text);
+        if (blocks && blocks.length > 0) {
+          editor.insertBlocks(blocks, editor.document[editor.document.length - 1], "after");
+        } else {
+          editor.insertBlocks(
+            [{ type: "paragraph", content: text }],
+            editor.document[editor.document.length - 1],
+            "after"
+          );
+        }
+        if (socket && isConnected) {
+          socket.emit("send-changes", documentId, editor.document);
+        }
+      } catch {
+        editor.insertBlocks(
+          [{ type: "paragraph", content: text }],
+          editor.document[editor.document.length - 1],
+          "after"
+        );
+        if (socket && isConnected) {
+          socket.emit("send-changes", documentId, editor.document);
+        }
+      }
+    },
+    clearContent: () => {
+      editor.replaceBlocks(editor.document, [{ type: "paragraph", content: "" }]);
+      if (socket && isConnected) {
+        socket.emit("send-changes", documentId, editor.document);
+      }
+    },
+  }));
+
   useEffect(() => {
+    if (!documentId) return;
+
     const s = io(BACKEND_URL, { transports: ["websocket", "polling"] });
 
     s.on("connect", () => {
       setIsConnected(true);
       onConnectionChange?.(true);
-      // Join document and send username for presence
-      s.emit("join-document", DOCUMENT_ID, userName.current);
+      // Join document with isolated document ID room
+      s.emit("join-document", documentId, userName.current);
     });
 
     s.on("disconnect", () => {
@@ -54,7 +118,9 @@ export default function Editor({ onPresenceChange, onConnectionChange }: EditorP
       if (savedBlocks && Array.isArray(savedBlocks) && savedBlocks.length > 0) {
         isApplyingRemote.current = true;
         editor.replaceBlocks(editor.document, savedBlocks);
-        setTimeout(() => { isApplyingRemote.current = false; }, 100);
+        setTimeout(() => {
+          isApplyingRemote.current = false;
+        }, 100);
       }
     });
 
@@ -62,7 +128,9 @@ export default function Editor({ onPresenceChange, onConnectionChange }: EditorP
     s.on("receive-changes", (incomingBlocks) => {
       isApplyingRemote.current = true;
       editor.replaceBlocks(editor.document, incomingBlocks);
-      setTimeout(() => { isApplyingRemote.current = false; }, 50);
+      setTimeout(() => {
+        isApplyingRemote.current = false;
+      }, 50);
     });
 
     // Receive presence updates
@@ -71,41 +139,68 @@ export default function Editor({ onPresenceChange, onConnectionChange }: EditorP
     });
 
     setSocket(s);
-    return () => { s.disconnect(); };
-  }, [editor, onPresenceChange, onConnectionChange]);
+    return () => {
+      s.disconnect();
+    };
+  }, [documentId, editor, onPresenceChange, onConnectionChange]);
 
   const onChange = () => {
     if (!socket || isApplyingRemote.current) return;
 
+    // Notify parent of text change
+    try {
+      const text = editor.document
+        .map((b) => (Array.isArray(b.content) ? b.content.map((c: any) => c.text || "").join("") : ""))
+        .join("\n");
+      onChangeContent?.(text);
+    } catch {}
+
     // Typing indicator: send typing=true, then stop after 1.5s of inactivity
-    socket.emit("typing", DOCUMENT_ID, true);
+    socket.emit("typing", documentId, true);
     if (typingTimer.current) clearTimeout(typingTimer.current);
     typingTimer.current = setTimeout(() => {
-      socket.emit("typing", DOCUMENT_ID, false);
+      socket.emit("typing", documentId, false);
     }, 1500);
 
     // Debounce actual content sync
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => {
-      socket.emit("send-changes", DOCUMENT_ID, editor.document);
+      socket.emit("send-changes", documentId, editor.document);
     }, 80);
   };
 
   return (
     <div className="w-full relative">
       {/* Connection status dot */}
-      <div style={{
-        position: "absolute", top: "-12px", right: "0",
-        display: "flex", alignItems: "center", gap: "5px",
-      }}>
-        <div style={{
-          width: "6px", height: "6px", borderRadius: "50%",
-          background: isConnected ? "#10b981" : "#f43f5e",
-          boxShadow: isConnected ? "0 0 6px rgba(16,185,129,0.8)" : "0 0 6px rgba(244,63,94,0.8)",
-          transition: "all 0.3s ease",
-        }} />
-        <span style={{ fontSize: "11px", color: isConnected ? "rgba(16,185,129,0.7)" : "rgba(244,63,94,0.7)" }}>
-          {isConnected ? "Connected" : "Reconnecting..."}
+      <div
+        style={{
+          position: "absolute",
+          top: "-12px",
+          right: "0",
+          display: "flex",
+          alignItems: "center",
+          gap: "5px",
+        }}
+      >
+        <div
+          style={{
+            width: "6px",
+            height: "6px",
+            borderRadius: "50%",
+            background: isConnected ? "#10b981" : "#f43f5e",
+            boxShadow: isConnected
+              ? "0 0 6px rgba(16,185,129,0.8)"
+              : "0 0 6px rgba(244,63,94,0.8)",
+            transition: "all 0.3s ease",
+          }}
+        />
+        <span
+          style={{
+            fontSize: "11px",
+            color: isConnected ? "rgba(16,185,129,0.7)" : "rgba(244,63,94,0.7)",
+          }}
+        >
+          {isConnected ? "Live Sync" : "Connecting..."}
         </span>
       </div>
 
@@ -117,4 +212,6 @@ export default function Editor({ onPresenceChange, onConnectionChange }: EditorP
       />
     </div>
   );
-}
+});
+
+export default Editor;

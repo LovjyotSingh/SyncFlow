@@ -4,38 +4,107 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
-  LucideFileText, LucideSearch, LucideSettings, LucideUsers,
-  LucideSparkles, LucideChevronRight, LucideHash, LucidePlus,
+  LucideSearch, LucideUsers,
+  LucideSparkles, LucideChevronRight, LucidePlus,
   LucideZap, LucideLink2, LucideMoreHorizontal, LucideClock,
-  LucideLogOut, LucideCheck,
+  LucideLogOut, LucideCheck, LucideTrash2, LucideDownload,
+  LucideFileText, LucideUserPlus, LucideRotateCcw, LucideShield,
 } from "lucide-react";
-import type { Presence } from "@/components/Editor";
+import type { Presence, EditorHandle } from "@/components/Editor";
 import AIPanel from "@/components/AIPanel";
-import { isLoggedIn, getUser, getToken, logout, type AuthUser } from "@/lib/auth";
-import { BACKEND_URL } from "@/lib/auth";
+import { isLoggedIn, getUser, getToken, logout, type AuthUser, BACKEND_URL } from "@/lib/auth";
 
 const Editor = dynamic(() => import("@/components/Editor"), { ssr: false });
 
-const documents = [
-  { id: 1, name: "Project Alpha: Q3 Roadmap", active: true, icon: "📄", time: "now" },
-  { id: 2, name: "Team Sync Notes", active: false, icon: "📝", time: "2h ago" },
-  { id: 3, name: "Design System v2", active: false, icon: "🎨", time: "Yesterday" },
-  { id: 4, name: "API Architecture", active: false, icon: "⚙️", time: "2d ago" },
-  { id: 5, name: "AI Feature Spec", active: false, icon: "✨", time: "3d ago" },
-];
+export interface DocumentItem {
+  _id: string;
+  title: string;
+  owner: string;
+  collaborators?: string[];
+  shareToken: string;
+  updatedAt?: string;
+}
+
+export interface CollaboratorUser {
+  _id: string;
+  name: string;
+  email: string;
+  avatarColor: string;
+}
 
 export default function Home() {
   const router = useRouter();
-  const [activeDoc, setActiveDoc] = useState(1);
+
+  // Document states
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [activeDocId, setActiveDocId] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [docFilter, setDocFilter] = useState<"all" | "shared">("all");
+  const [docTitle, setDocTitle] = useState("");
+  const [savingTitle, setSavingTitle] = useState(false);
+  const [lastSaved, setLastSaved] = useState("Just now");
+
+  // User & Presence
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [presence, setPresence] = useState<Presence[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+
+  // UI Modals & Dropdowns
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
-  const [linkCopied, setLinkCopied] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
-  const [shareUrl, setShareUrl] = useState("");
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
-  const getEditorContent = useRef<() => string>(() => "");
+
+  // Share / Collaborator states
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [inviteSuccess, setInviteSuccess] = useState("");
+  const [collaboratorsList, setCollaboratorsList] = useState<{
+    owner?: CollaboratorUser;
+    collaborators?: CollaboratorUser[];
+    invitedEmails?: string[];
+  }>({});
+
+  // Document Stats
+  const [editorText, setEditorText] = useState("");
+
+  const editorRef = useRef<EditorHandle | null>(null);
+  const titleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Auth & Initial Data Fetch ───────────────────────────────────────────────
+  const fetchDocuments = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/documents/user/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data: DocumentItem[] = await res.json();
+        if (data.length > 0) {
+          setDocuments(data);
+          setActiveDocId((prev) => prev || data[0]._id);
+          setDocTitle((prev) => prev || data[0].title);
+        } else {
+          // Create initial document for new user
+          const createRes = await fetch(`${BACKEND_URL}/api/documents`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ title: "Welcome to SyncFlow" }),
+          });
+          if (createRes.ok) {
+            const newDoc = await createRes.json();
+            setDocuments([newDoc]);
+            setActiveDocId(newDoc._id);
+            setDocTitle(newDoc.title);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching documents:", err);
+    }
+  }, []);
 
   useEffect(() => {
     if (!isLoggedIn()) {
@@ -43,34 +112,161 @@ export default function Home() {
       return;
     }
     setCurrentUser(getUser());
-    // Generate a share URL for the default document
+    fetchDocuments();
+  }, [router, fetchDocuments]);
+
+  // Update active document title when activeDocId changes
+  useEffect(() => {
+    const current = documents.find((d) => d._id === activeDocId);
+    if (current) {
+      setDocTitle(current.title);
+    }
+  }, [activeDocId, documents]);
+
+  // Fetch collaborators when share modal opens
+  useEffect(() => {
+    if (shareModalOpen && activeDocId) {
+      const token = getToken();
+      if (!token) return;
+      fetch(`${BACKEND_URL}/api/documents/${activeDocId}/collaborators`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => (r.ok ? r.json() : {}))
+        .then((data) => setCollaboratorsList(data))
+        .catch(() => {});
+    }
+  }, [shareModalOpen, activeDocId]);
+
+  // ── Document Management ─────────────────────────────────────────────────────
+  const createNewDocument = async () => {
     const token = getToken();
-    if (token) {
-      fetch(`${BACKEND_URL}/api/documents`, {
+    if (!token) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/documents`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ title: "Project Alpha: Q3 Roadmap" }),
-      })
-        .then((r) => r.json())
-        .then((doc) => {
-          if (doc.shareToken) {
-            const base = process.env.NEXT_PUBLIC_BACKEND_URL?.replace(":5000", ":3000") || window.location.origin;
-            setShareUrl(`${window.location.origin}/doc/${doc.shareToken}`);
-          }
-        })
-        .catch(() => {
-          setShareUrl(`${window.location.origin}/doc/demo-link`);
-        });
+        body: JSON.stringify({ title: "Untitled Workspace" }),
+      });
+      if (res.ok) {
+        const newDoc: DocumentItem = await res.json();
+        setDocuments((prev) => [newDoc, ...prev]);
+        setActiveDocId(newDoc._id);
+        setDocTitle(newDoc.title);
+      }
+    } catch (err) {
+      console.error("Error creating document:", err);
     }
-  }, [router]);
+  };
 
-  const handlePresenceChange = useCallback((users: Presence[]) => {
-    setPresence(users);
-  }, []);
+  const handleTitleChange = (newTitle: string) => {
+    setDocTitle(newTitle);
+    setSavingTitle(true);
+    if (titleTimer.current) clearTimeout(titleTimer.current);
+    titleTimer.current = setTimeout(async () => {
+      const token = getToken();
+      if (!token || !activeDocId) return;
+      try {
+        await fetch(`${BACKEND_URL}/api/documents/${activeDocId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ title: newTitle }),
+        });
+        setDocuments((prev) =>
+          prev.map((d) => (d._id === activeDocId ? { ...d, title: newTitle } : d))
+        );
+        setSavingTitle(false);
+        setLastSaved("Just now");
+      } catch {
+        setSavingTitle(false);
+      }
+    }, 600);
+  };
 
-  const handleConnectionChange = useCallback((connected: boolean) => {
-    setIsConnected(connected);
-  }, []);
+  const deleteActiveDocument = async () => {
+    if (!confirm("Are you sure you want to delete this document?")) return;
+    const token = getToken();
+    if (!token || !activeDocId) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/documents/${activeDocId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const remaining = documents.filter((d) => d._id !== activeDocId);
+        setDocuments(remaining);
+        if (remaining.length > 0) {
+          setActiveDocId(remaining[0]._id);
+          setDocTitle(remaining[0].title);
+        } else {
+          createNewDocument();
+        }
+        setMoreMenuOpen(false);
+      }
+    } catch (err) {
+      console.error("Error deleting document:", err);
+    }
+  };
+
+  const exportMarkdown = () => {
+    const text = editorRef.current?.getText() || "";
+    const blob = new Blob([`# ${docTitle}\n\n${text}`], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${docTitle.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setMoreMenuOpen(false);
+  };
+
+  // ── Invite Collaborator ─────────────────────────────────────────────────────
+  const sendInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim() || !activeDocId) return;
+    setInviting(true);
+    setInviteSuccess("");
+    const token = getToken();
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/documents/${activeDocId}/invite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ email: inviteEmail.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setInviteSuccess(data.message || "Invite sent!");
+        setInviteEmail("");
+        // Refresh collaborators
+        fetch(`${BACKEND_URL}/api/documents/${activeDocId}/collaborators`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+          .then((r) => (r.ok ? r.json() : {}))
+          .then((d) => setCollaboratorsList(d));
+      }
+    } catch {
+      setInviteSuccess("Failed to send invite");
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  // ── Filtered Documents ──────────────────────────────────────────────────────
+  const filteredDocuments = documents.filter((doc) => {
+    const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchesSearch) return false;
+    if (docFilter === "shared") {
+      return doc.owner !== currentUser?.id;
+    }
+    return true;
+  });
+
+  const activeDoc = documents.find((d) => d._id === activeDocId);
+  const shareUrl = typeof window !== "undefined" && activeDoc
+    ? `${window.location.origin}/doc/${activeDoc.shareToken}`
+    : "";
+
+  const wordCount = editorText.trim() ? editorText.trim().split(/\s+/).length : 0;
+  const charCount = editorText.length;
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: "#080810", fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -86,115 +282,151 @@ export default function Home() {
           background: "radial-gradient(circle, rgba(139,92,246,0.10) 0%, transparent 70%)",
           filter: "blur(40px)",
         }} />
-        <div style={{
-          position: "absolute", top: "40%", right: "20%", width: "30%", height: "30%",
-          background: "radial-gradient(circle, rgba(6,182,212,0.06) 0%, transparent 70%)",
-          filter: "blur(60px)",
-        }} />
       </div>
 
       {/* ─── SIDEBAR ─── */}
       <aside style={{
-        width: "260px", minWidth: "260px",
+        width: "270px", minWidth: "270px",
         background: "rgba(255,255,255,0.03)",
         borderRight: "1px solid rgba(255,255,255,0.07)",
         backdropFilter: "blur(20px)",
         display: "flex", flexDirection: "column",
         position: "relative", zIndex: 20,
       }}>
-        {/* Logo */}
-        <div style={{ padding: "20px 20px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        {/* Logo & New Doc Button */}
+        <div style={{ padding: "18px 18px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <div style={{
               width: "32px", height: "32px",
               background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
               borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center",
               boxShadow: "0 0 16px rgba(99,102,241,0.5), inset 0 1px 0 rgba(255,255,255,0.2)",
-              fontSize: "13px", fontWeight: "800", color: "white", letterSpacing: "0.5px",
+              fontSize: "13px", fontWeight: "800", color: "white",
             }}>SF</div>
             <span style={{ color: "white", fontWeight: "700", fontSize: "15px", letterSpacing: "-0.3px" }}>SyncFlow</span>
           </div>
+
+          <button
+            onClick={createNewDocument}
+            title="Create new document"
+            style={{
+              width: "28px", height: "28px", borderRadius: "8px",
+              background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)",
+              color: "#a5b4fc", display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer", transition: "all 0.15s ease",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.3)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; }}
+          >
+            <LucidePlus style={{ width: "15px", height: "15px" }} />
+          </button>
         </div>
 
-        {/* Search */}
-        <div style={{ padding: "12px 16px" }}>
+        {/* Real-time Search */}
+        <div style={{ padding: "12px 14px 8px" }}>
           <div style={{ position: "relative" }}>
-            <LucideSearch style={{ position: "absolute", left: "10px", top: "9px", width: "14px", height: "14px", color: "rgba(255,255,255,0.3)" }} />
-            <input type="text" placeholder="Search..." style={{
-              width: "100%", background: "rgba(255,255,255,0.05)",
-              border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px",
-              padding: "7px 10px 7px 32px", color: "rgba(255,255,255,0.7)",
-              fontSize: "13px", outline: "none", boxSizing: "border-box",
-            }} />
+            <LucideSearch style={{ position: "absolute", left: "10px", top: "9px", width: "13px", height: "13px", color: "rgba(255,255,255,0.3)" }} />
+            <input
+              type="text"
+              placeholder="Search documents..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: "100%", background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px",
+                padding: "7px 10px 7px 30px", color: "rgba(255,255,255,0.8)",
+                fontSize: "12px", outline: "none", boxSizing: "border-box",
+              }}
+            />
           </div>
         </div>
 
-        {/* Document list */}
-        <div style={{ padding: "0 8px", flex: 1, overflowY: "auto" }}>
-          <div style={{ padding: "8px 10px 4px", fontSize: "11px", color: "rgba(255,255,255,0.25)", fontWeight: "600", letterSpacing: "0.8px", textTransform: "uppercase" }}>
-            Documents
-          </div>
-          {documents.map((doc) => (
-            <button key={doc.id} onClick={() => setActiveDoc(doc.id)} style={{
-              width: "100%", display: "flex", alignItems: "center", gap: "8px",
-              padding: "8px 10px", borderRadius: "8px", border: "none", cursor: "pointer",
-              background: activeDoc === doc.id ? "rgba(99,102,241,0.15)" : "transparent",
-              outline: "none", textAlign: "left",
-              boxShadow: activeDoc === doc.id ? "inset 0 0 0 1px rgba(99,102,241,0.3)" : "none",
-              transition: "all 0.15s ease",
-            } as React.CSSProperties}
-            onMouseEnter={(e) => { if (activeDoc !== doc.id) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)"; }}
-            onMouseLeave={(e) => { if (activeDoc !== doc.id) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-            >
-              <span style={{ fontSize: "14px" }}>{doc.icon}</span>
-              <span style={{
-                flex: 1, fontSize: "13px", fontWeight: activeDoc === doc.id ? "500" : "400",
-                color: activeDoc === doc.id ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.5)",
-                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-              }}>{doc.name}</span>
-              <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.2)", whiteSpace: "nowrap" }}>{doc.time}</span>
-            </button>
-          ))}
-
-          <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", margin: "12px 4px" }} />
-
-          {[{ icon: LucideUsers, label: "Shared with me" }, { icon: LucideHash, label: "Templates" }].map(({ icon: Icon, label }) => (
-            <button key={label} style={{
-              width: "100%", display: "flex", alignItems: "center", gap: "8px",
-              padding: "7px 10px", borderRadius: "8px", border: "none",
-              background: "transparent", cursor: "pointer", outline: "none", textAlign: "left",
-            } as React.CSSProperties}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-            >
-              <Icon style={{ width: "14px", height: "14px", color: "rgba(255,255,255,0.3)" }} />
-              <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)" }}>{label}</span>
-            </button>
-          ))}
+        {/* Document Filter Tabs */}
+        <div style={{ display: "flex", gap: "4px", padding: "0 14px 6px" }}>
+          <button
+            onClick={() => setDocFilter("all")}
+            style={{
+              flex: 1, padding: "5px 0", borderRadius: "6px", border: "none",
+              background: docFilter === "all" ? "rgba(255,255,255,0.08)" : "transparent",
+              color: docFilter === "all" ? "white" : "rgba(255,255,255,0.35)",
+              fontSize: "11px", fontWeight: "600", cursor: "pointer",
+            }}
+          >
+            All Docs ({documents.length})
+          </button>
+          <button
+            onClick={() => setDocFilter("shared")}
+            style={{
+              flex: 1, padding: "5px 0", borderRadius: "6px", border: "none",
+              background: docFilter === "shared" ? "rgba(255,255,255,0.08)" : "transparent",
+              color: docFilter === "shared" ? "white" : "rgba(255,255,255,0.35)",
+              fontSize: "11px", fontWeight: "600", cursor: "pointer",
+            }}
+          >
+            Shared with me
+          </button>
         </div>
 
-        {/* Bottom status */}
-        <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+        {/* Dynamic Document list */}
+        <div style={{ padding: "4px 8px", flex: 1, overflowY: "auto" }}>
+          {filteredDocuments.length === 0 ? (
+            <div style={{ padding: "20px 10px", textAlign: "center", color: "rgba(255,255,255,0.3)", fontSize: "12px" }}>
+              {searchQuery ? "No matching documents" : "No documents found"}
+            </div>
+          ) : (
+            filteredDocuments.map((doc) => (
+              <button
+                key={doc._id}
+                onClick={() => setActiveDocId(doc._id)}
+                style={{
+                  width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                  padding: "8px 10px", borderRadius: "8px", border: "none", cursor: "pointer",
+                  background: activeDocId === doc._id ? "rgba(99,102,241,0.18)" : "transparent",
+                  outline: "none", textAlign: "left",
+                  boxShadow: activeDocId === doc._id ? "inset 0 0 0 1px rgba(99,102,241,0.35)" : "none",
+                  transition: "all 0.15s ease",
+                  marginBottom: "2px",
+                } as React.CSSProperties}
+                onMouseEnter={(e) => { if (activeDocId !== doc._id) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)"; }}
+                onMouseLeave={(e) => { if (activeDocId !== doc._id) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+              >
+                <LucideFileText style={{ width: "14px", height: "14px", color: activeDocId === doc._id ? "#818cf8" : "rgba(255,255,255,0.35)", flexShrink: 0 }} />
+                <span style={{
+                  flex: 1, fontSize: "13px", fontWeight: activeDocId === doc._id ? "500" : "400",
+                  color: activeDocId === doc._id ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.55)",
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>{doc.title}</span>
+                {doc.owner !== currentUser?.id && (
+                  <span style={{ fontSize: "9px", padding: "1px 5px", borderRadius: "4px", background: "rgba(99,102,241,0.2)", color: "#a5b4fc" }}>
+                    Shared
+                  </span>
+                )}
+              </button>
+            ))
+          )}
+        </div>
+
+        {/* Bottom User profile & status */}
+        <div style={{ padding: "12px 14px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
           <div style={{
             display: "flex", alignItems: "center", gap: "8px",
-            padding: "8px 10px", borderRadius: "8px",
+            padding: "7px 10px", borderRadius: "8px",
             background: isConnected ? "rgba(16,185,129,0.08)" : "rgba(244,63,94,0.08)",
-            border: `1px solid ${isConnected ? "rgba(16,185,129,0.15)" : "rgba(244,63,94,0.15)"}`,
-            marginBottom: "8px", transition: "all 0.3s ease",
+            border: `1px solid ${isConnected ? "rgba(16,185,129,0.18)" : "rgba(244,63,94,0.18)"}`,
+            marginBottom: "8px",
           }}>
             <div style={{
-              width: "7px", height: "7px", borderRadius: "50%",
+              width: "6px", height: "6px", borderRadius: "50%",
               background: isConnected ? "#10b981" : "#f43f5e",
               boxShadow: `0 0 8px ${isConnected ? "rgba(16,185,129,0.8)" : "rgba(244,63,94,0.8)"}`,
             }} />
-            <span style={{ fontSize: "12px", color: isConnected ? "rgba(16,185,129,0.9)" : "rgba(244,63,94,0.9)", fontWeight: "500" }}>
-              {isConnected ? `${presence.length} collaborator${presence.length !== 1 ? "s" : ""} live` : "Connecting..."}
+            <span style={{ fontSize: "11px", color: isConnected ? "rgba(16,185,129,0.9)" : "rgba(244,63,94,0.9)", fontWeight: "500" }}>
+              {isConnected ? `${presence.length} live in workspace` : "Connecting..."}
             </span>
           </div>
 
-          {/* User profile row */}
           {currentUser && (
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 10px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "4px 6px" }}>
               <div style={{
                 width: "28px", height: "28px", borderRadius: "50%",
                 background: currentUser.avatarColor,
@@ -205,15 +437,15 @@ export default function Home() {
                 {currentUser.name.slice(0, 2).toUpperCase()}
               </div>
               <div style={{ flex: 1, overflow: "hidden" }}>
-                <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)", fontWeight: "500", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentUser.name}</div>
-                <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.25)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentUser.email}</div>
+                <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.8)", fontWeight: "500", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentUser.name}</div>
+                <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentUser.email}</div>
               </div>
               <button onClick={logout} title="Sign out" style={{
                 background: "none", border: "none", cursor: "pointer",
-                color: "rgba(255,255,255,0.25)", padding: "4px", borderRadius: "6px",
+                color: "rgba(255,255,255,0.3)", padding: "4px", borderRadius: "6px",
               }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "rgba(244,63,94,0.7)"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.25)"; }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "rgba(244,63,94,0.8)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.3)"; }}
               >
                 <LucideLogOut style={{ width: "14px", height: "14px" }} />
               </button>
@@ -222,7 +454,7 @@ export default function Home() {
         </div>
       </aside>
 
-      {/* ─── MAIN ─── */}
+      {/* ─── MAIN WORKSPACE ─── */}
       <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative", zIndex: 10 }}>
         {/* Top Header */}
         <header style={{
@@ -233,22 +465,22 @@ export default function Home() {
         }}>
           {/* Breadcrumb */}
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.25)" }}>Workspace</span>
-            <LucideChevronRight style={{ width: "13px", height: "13px", color: "rgba(255,255,255,0.15)" }} />
-            <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.25)" }}>Documents</span>
+            <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.3)" }}>Workspace</span>
             <LucideChevronRight style={{ width: "13px", height: "13px", color: "rgba(255,255,255,0.15)" }} />
             <span style={{
               fontSize: "13px", color: "rgba(255,255,255,0.85)", fontWeight: "500",
               background: "rgba(255,255,255,0.07)", padding: "3px 8px",
               borderRadius: "6px", border: "1px solid rgba(255,255,255,0.08)",
-            }}>Project Alpha</span>
+            }}>{docTitle}</span>
           </div>
 
           {/* Right actions */}
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
               <LucideClock style={{ width: "12px", height: "12px", color: "rgba(255,255,255,0.2)" }} />
-              <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.2)" }}>Saved just now</span>
+              <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.25)" }}>
+                {savingTitle ? "Saving title..." : lastSaved}
+              </span>
             </div>
 
             {/* Live presence avatars */}
@@ -265,7 +497,6 @@ export default function Home() {
                     cursor: "pointer", zIndex: presence.length - i, position: "relative",
                     outline: user.isTyping ? `2px solid ${user.color}` : "none",
                     outlineOffset: "1px",
-                    transition: "outline 0.2s ease",
                   }}>
                     {user.name.slice(0, 2).toUpperCase()}
                   </div>
@@ -273,68 +504,146 @@ export default function Home() {
               </div>
             )}
 
-            {/* AI button */}
+            {/* AI Assistant Button */}
             <button
               onClick={() => setAiPanelOpen(!aiPanelOpen)}
               style={{
                 display: "flex", alignItems: "center", gap: "6px",
                 padding: "7px 14px", borderRadius: "8px",
-                background: aiPanelOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.07)",
+                background: aiPanelOpen ? "rgba(99,102,241,0.25)" : "rgba(255,255,255,0.07)",
                 border: aiPanelOpen ? "1px solid rgba(99,102,241,0.4)" : "1px solid rgba(255,255,255,0.1)",
-                color: aiPanelOpen ? "rgba(139,92,246,0.9)" : "rgba(255,255,255,0.7)",
+                color: aiPanelOpen ? "rgba(139,92,246,0.95)" : "rgba(255,255,255,0.75)",
                 fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none",
-                boxShadow: aiPanelOpen ? "0 0 12px rgba(99,102,241,0.2)" : "none",
-                transition: "all 0.2s ease",
+                boxShadow: aiPanelOpen ? "0 0 12px rgba(99,102,241,0.25)" : "none",
+                transition: "all 0.15s ease",
               }}
             >
               <LucideSparkles style={{ width: "13px", height: "13px" }} />
-              AI
+              Gemini AI
             </button>
 
-            <button onClick={() => {
-              navigator.clipboard.writeText(window.location.href);
-              setLinkCopied(true);
-              setTimeout(() => setLinkCopied(false), 2000);
-            }} style={{
-              display: "flex", alignItems: "center", gap: "6px", padding: "7px 14px", borderRadius: "8px",
-              background: linkCopied ? "rgba(16,185,129,0.1)" : "rgba(255,255,255,0.07)",
-              border: linkCopied ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(255,255,255,0.1)",
-              color: linkCopied ? "rgba(16,185,129,0.9)" : "rgba(255,255,255,0.7)",
-              fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none",
-              transition: "all 0.2s ease",
-            }}>
+            {/* Quick Copy Link Button */}
+            <button
+              onClick={() => {
+                if (shareUrl) {
+                  navigator.clipboard.writeText(shareUrl);
+                  setLinkCopied(true);
+                  setTimeout(() => setLinkCopied(false), 2000);
+                }
+              }}
+              style={{
+                display: "flex", alignItems: "center", gap: "6px", padding: "7px 13px", borderRadius: "8px",
+                background: linkCopied ? "rgba(16,185,129,0.12)" : "rgba(255,255,255,0.07)",
+                border: linkCopied ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(255,255,255,0.1)",
+                color: linkCopied ? "#10b981" : "rgba(255,255,255,0.7)",
+                fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none",
+                transition: "all 0.15s ease",
+              }}
+            >
               {linkCopied ? <LucideCheck style={{ width: "13px", height: "13px" }} /> : <LucideLink2 style={{ width: "13px", height: "13px" }} />}
-              {linkCopied ? "Copied!" : "Copy link"}
+              {linkCopied ? "Copied" : "Copy Link"}
             </button>
 
-            <button onClick={() => setShareModalOpen(true)} style={{
-              display: "flex", alignItems: "center", gap: "6px", padding: "7px 16px", borderRadius: "8px",
-              background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
-              border: "1px solid rgba(99,102,241,0.5)",
-              color: "white", fontSize: "13px", fontWeight: "600", cursor: "pointer", outline: "none",
-              boxShadow: "0 0 20px rgba(99,102,241,0.35), inset 0 1px 0 rgba(255,255,255,0.15)",
-            }}>
+            {/* Share Modal Trigger */}
+            <button
+              onClick={() => setShareModalOpen(true)}
+              style={{
+                display: "flex", alignItems: "center", gap: "6px", padding: "7px 15px", borderRadius: "8px",
+                background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                border: "1px solid rgba(99,102,241,0.5)",
+                color: "white", fontSize: "13px", fontWeight: "600", cursor: "pointer", outline: "none",
+                boxShadow: "0 0 20px rgba(99,102,241,0.35)",
+              }}
+            >
               <LucideZap style={{ width: "13px", height: "13px" }} />
               Share
             </button>
 
-            <button style={{
-              width: "32px", height: "32px", borderRadius: "8px",
-              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: "pointer", outline: "none",
-            }}>
-              <LucideMoreHorizontal style={{ width: "15px", height: "15px", color: "rgba(255,255,255,0.4)" }} />
-            </button>
+            {/* More Options Dropdown */}
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+                style={{
+                  width: "32px", height: "32px", borderRadius: "8px",
+                  background: moreMenuOpen ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer", outline: "none",
+                }}
+              >
+                <LucideMoreHorizontal style={{ width: "15px", height: "15px", color: "rgba(255,255,255,0.6)" }} />
+              </button>
+
+              {moreMenuOpen && (
+                <div style={{
+                  position: "absolute", right: 0, top: "40px", width: "210px",
+                  background: "rgba(20,20,35,0.98)", border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: "12px", padding: "6px", zIndex: 100,
+                  boxShadow: "0 16px 40px rgba(0,0,0,0.6)", backdropFilter: "blur(20px)",
+                }}>
+                  <div style={{ padding: "6px 10px", fontSize: "10px", color: "rgba(255,255,255,0.3)", fontWeight: "600", textTransform: "uppercase" }}>
+                    Stats: {wordCount} words · {charCount} chars
+                  </div>
+                  <button
+                    onClick={exportMarkdown}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      background: "transparent", color: "rgba(255,255,255,0.8)", fontSize: "12px",
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  >
+                    <LucideDownload style={{ width: "13px", height: "13px", color: "#818cf8" }} />
+                    Export as Markdown
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm("Clear all editor content?")) {
+                        editorRef.current?.clearContent();
+                        setMoreMenuOpen(false);
+                      }
+                    }}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      background: "transparent", color: "rgba(255,255,255,0.8)", fontSize: "12px",
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  >
+                    <LucideRotateCcw style={{ width: "13px", height: "13px", color: "#fbbf24" }} />
+                    Clear Document
+                  </button>
+                  <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", margin: "4px 0" }} />
+                  <button
+                    onClick={deleteActiveDocument}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      background: "transparent", color: "#f43f5e", fontSize: "12px",
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(244,63,94,0.15)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  >
+                    <LucideTrash2 style={{ width: "13px", height: "13px" }} />
+                    Delete Document
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
-        {/* Content row */}
+        {/* Editor & AI Panel Split */}
         <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
           {/* Editor scrollable area */}
           <div style={{ flex: 1, overflowY: "auto", padding: "48px 40px" }}>
-            <div style={{ maxWidth: "760px", margin: "0 auto" }}>
-              {/* Title */}
+            <div style={{ maxWidth: "780px", margin: "0 auto" }}>
+              {/* Dynamic Editable Title */}
               <div style={{ marginBottom: "32px", position: "relative" }}>
                 <div style={{
                   position: "absolute", left: "-24px", top: "8px",
@@ -342,28 +651,31 @@ export default function Home() {
                   background: "linear-gradient(180deg, #6366f1, #8b5cf6)",
                   boxShadow: "0 0 12px rgba(99,102,241,0.6)",
                 }} />
-                <input type="text" defaultValue="Project Alpha: Q3 Roadmap" style={{
-                  background: "transparent", border: "none", outline: "none",
-                  fontSize: "42px", fontWeight: "800", color: "rgba(255,255,255,0.95)",
-                  letterSpacing: "-1.5px", width: "100%", lineHeight: "1.1",
-                }} />
+                <input
+                  type="text"
+                  value={docTitle}
+                  onChange={(e) => handleTitleChange(e.target.value)}
+                  placeholder="Untitled Document"
+                  style={{
+                    background: "transparent", border: "none", outline: "none",
+                    fontSize: "38px", fontWeight: "800", color: "rgba(255,255,255,0.95)",
+                    letterSpacing: "-1.2px", width: "100%", lineHeight: "1.1",
+                  }}
+                />
                 <div style={{ display: "flex", alignItems: "center", gap: "16px", marginTop: "10px" }}>
-                  <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.2)" }}>
-                    Syncing in real-time · {presence.length} online
+                  <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.25)" }}>
+                    Syncing in real-time · {presence.length} collaborator{presence.length !== 1 ? "s" : ""} online
                   </span>
-                  {/* Typing indicators */}
-                  {presence.filter(u => u.isTyping).map((u, i) => (
-                    <span key={i} style={{
-                      fontSize: "12px", color: u.color, display: "flex", alignItems: "center", gap: "4px",
-                    }}>
-                      <span style={{ opacity: 0.8 }}>{u.name}</span>
-                      <span style={{ letterSpacing: "2px", animation: "blink 1s infinite" }}>...</span>
+                  {presence.filter((u) => u.isTyping).map((u, i) => (
+                    <span key={i} style={{ fontSize: "12px", color: u.color, display: "flex", alignItems: "center", gap: "4px" }}>
+                      <span>{u.name} is typing</span>
+                      <span style={{ animation: "blink 1s infinite" }}>...</span>
                     </span>
                   ))}
                 </div>
               </div>
 
-              {/* Editor card */}
+              {/* Editor Surface */}
               <div style={{ position: "relative" }}>
                 <div style={{
                   position: "absolute", inset: "-1px", borderRadius: "18px",
@@ -376,7 +688,6 @@ export default function Home() {
                   borderRadius: "17px", overflow: "hidden",
                   boxShadow: "0 8px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06)",
                 }}>
-                  {/* Window chrome */}
                   <div style={{
                     display: "flex", alignItems: "center", gap: "6px",
                     padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.06)",
@@ -387,37 +698,58 @@ export default function Home() {
                     <div style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#28c840" }} />
                     <div style={{ flex: 1, textAlign: "center" }}>
                       <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.2)", fontWeight: "500" }}>
-                        syncflow · shared document
+                        syncflow · {activeDocId ? `doc:${activeDocId.slice(-6)}` : "isolated workspace"}
                       </span>
                     </div>
                   </div>
 
                   <div style={{ padding: "24px 32px 32px" }} className="editor-dark-wrapper">
-                    <Editor
-                      onPresenceChange={handlePresenceChange}
-                      onConnectionChange={handleConnectionChange}
-                    />
+                    {activeDocId ? (
+                      <Editor
+                        key={activeDocId}
+                        ref={editorRef}
+                        documentId={activeDocId}
+                        onPresenceChange={setPresence}
+                        onConnectionChange={setIsConnected}
+                        onChangeContent={setEditorText}
+                      />
+                    ) : (
+                      <div style={{ color: "rgba(255,255,255,0.3)", textAlign: "center", padding: "40px 0" }}>
+                        Loading document...
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* AI Panel */}
+          {/* AI Panel with Direct Insertion & Freeform Chat */}
           <AIPanel
-            getEditorContent={getEditorContent.current}
+            getEditorContent={() => editorRef.current?.getText() || ""}
             isOpen={aiPanelOpen}
             onClose={() => setAiPanelOpen(false)}
+            onInsertContent={(text) => editorRef.current?.insertContent(text)}
           />
         </div>
       </main>
 
-      {/* Share Modal */}
+      {/* ── Real Share & Collaborators Modal ── */}
       {shareModalOpen && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }}
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 100,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
+          }}
           onClick={() => setShareModalOpen(false)}
         >
-          <div style={{ background: "rgba(15,15,25,0.98)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "20px", padding: "28px", width: "420px", boxShadow: "0 24px 80px rgba(0,0,0,0.7)" }}
+          <div
+            style={{
+              background: "rgba(15,15,25,0.98)", border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: "20px", padding: "28px", width: "440px",
+              boxShadow: "0 24px 80px rgba(0,0,0,0.8)",
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px" }}>
@@ -425,31 +757,57 @@ export default function Home() {
                 <LucideZap style={{ width: "16px", height: "16px", color: "white" }} />
               </div>
               <div>
-                <div style={{ color: "rgba(255,255,255,0.9)", fontWeight: "700", fontSize: "16px" }}>Share Document</div>
-                <div style={{ color: "rgba(255,255,255,0.35)", fontSize: "12px" }}>Anyone with this link can collaborate</div>
+                <div style={{ color: "rgba(255,255,255,0.95)", fontWeight: "700", fontSize: "16px" }}>Share Workspace</div>
+                <div style={{ color: "rgba(255,255,255,0.35)", fontSize: "12px" }}>Invite friends & collaborators securely</div>
               </div>
             </div>
 
-            <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px", padding: "10px 14px", marginBottom: "14px" }}>
-              <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", marginBottom: "4px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.5px" }}>Invite Link</div>
-              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.65)", wordBreak: "break-all", lineHeight: "1.5" }}>
-                {shareUrl || "Generating link..."}
+            {/* Invite by Email */}
+            <form onSubmit={sendInvite} style={{ marginBottom: "18px" }}>
+              <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginBottom: "6px", fontWeight: "600", textTransform: "uppercase" }}>
+                Invite by Email / Username
               </div>
-            </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <input
+                  type="email"
+                  placeholder="friend@domain.com"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  style={{
+                    flex: 1, background: "rgba(255,255,255,0.05)",
+                    border: "1px solid rgba(255,255,255,0.1)", borderRadius: "9px",
+                    padding: "9px 12px", color: "rgba(255,255,255,0.9)",
+                    fontSize: "13px", outline: "none",
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={inviting || !inviteEmail.trim()}
+                  style={{
+                    padding: "9px 16px", borderRadius: "9px",
+                    background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                    border: "none", color: "white", fontSize: "13px", fontWeight: "600",
+                    cursor: inviting || !inviteEmail.trim() ? "not-allowed" : "pointer",
+                    display: "flex", alignItems: "center", gap: "6px",
+                  }}
+                >
+                  <LucideUserPlus style={{ width: "13px", height: "13px" }} />
+                  {inviting ? "Inviting..." : "Invite"}
+                </button>
+              </div>
+              {inviteSuccess && (
+                <div style={{ fontSize: "11px", color: "#10b981", marginTop: "6px" }}>{inviteSuccess}</div>
+              )}
+            </form>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "16px", padding: "12px", background: "rgba(99,102,241,0.06)", borderRadius: "10px", border: "1px solid rgba(99,102,241,0.15)" }}>
-              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", display: "flex", alignItems: "center", gap: "6px" }}>
-                <LucideCheck style={{ width: "12px", height: "12px", color: "#10b981" }} /> Only people with this exact link can access
+            {/* Share Link Copy */}
+            <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px", padding: "12px 14px", marginBottom: "18px" }}>
+              <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", marginBottom: "4px", fontWeight: "600", textTransform: "uppercase" }}>
+                Secret Invite Link
               </div>
-              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", display: "flex", alignItems: "center", gap: "6px" }}>
-                <LucideCheck style={{ width: "12px", height: "12px", color: "#10b981" }} /> They must be logged in to SyncFlow
+              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.65)", wordBreak: "break-all", lineHeight: "1.4", marginBottom: "10px" }}>
+                {shareUrl || "Loading link..."}
               </div>
-              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.5)", display: "flex", alignItems: "center", gap: "6px" }}>
-                <LucideCheck style={{ width: "12px", height: "12px", color: "#10b981" }} /> Edits sync in real-time once they join
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: "8px" }}>
               <button
                 onClick={() => {
                   if (shareUrl) {
@@ -458,13 +816,66 @@ export default function Home() {
                     setTimeout(() => setShareCopied(false), 2000);
                   }
                 }}
-                style={{ flex: 1, padding: "11px", borderRadius: "10px", background: shareCopied ? "rgba(16,185,129,0.15)" : "linear-gradient(135deg, #6366f1, #8b5cf6)", border: shareCopied ? "1px solid rgba(16,185,129,0.3)" : "none", color: "white", fontSize: "13px", fontWeight: "600", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", boxShadow: shareCopied ? "none" : "0 0 20px rgba(99,102,241,0.35)", transition: "all 0.2s ease" }}
+                style={{
+                  width: "100%", padding: "9px", borderRadius: "8px",
+                  background: shareCopied ? "rgba(16,185,129,0.15)" : "rgba(99,102,241,0.15)",
+                  border: shareCopied ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(99,102,241,0.3)",
+                  color: shareCopied ? "#10b981" : "#a5b4fc", fontSize: "12px", fontWeight: "600",
+                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                }}
               >
-                {shareCopied ? <LucideCheck style={{ width: "14px", height: "14px" }} /> : <LucideLink2 style={{ width: "14px", height: "14px" }} />}
-                {shareCopied ? "Link Copied!" : "Copy Invite Link"}
+                {shareCopied ? <LucideCheck style={{ width: "13px", height: "13px" }} /> : <LucideLink2 style={{ width: "13px", height: "13px" }} />}
+                {shareCopied ? "Invite Link Copied to Clipboard" : "Copy Secret Invite Link"}
               </button>
-              <button onClick={() => setShareModalOpen(false)} style={{ padding: "11px 18px", borderRadius: "10px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)", fontSize: "13px", cursor: "pointer" }}>
-                Close
+            </div>
+
+            {/* Real Collaborators List */}
+            <div style={{ marginBottom: "20px" }}>
+              <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginBottom: "8px", fontWeight: "600", textTransform: "uppercase" }}>
+                Workspace Members
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "120px", overflowY: "auto" }}>
+                {collaboratorsList.owner && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 8px", background: "rgba(255,255,255,0.03)", borderRadius: "8px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: collaboratorsList.owner.avatarColor || "#6366f1", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: "700", color: "white" }}>
+                        {collaboratorsList.owner.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.85)", fontWeight: "500" }}>{collaboratorsList.owner.name}</div>
+                        <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>{collaboratorsList.owner.email}</div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "4px", background: "rgba(99,102,241,0.2)", color: "#a5b4fc", fontWeight: "600" }}>
+                      Owner
+                    </span>
+                  </div>
+                )}
+                {collaboratorsList.collaborators?.map((c) => (
+                  <div key={c._id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 8px", background: "rgba(255,255,255,0.03)", borderRadius: "8px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: c.avatarColor || "#10b981", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: "700", color: "white" }}>
+                        {c.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.85)", fontWeight: "500" }}>{c.name}</div>
+                        <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>{c.email}</div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "4px", background: "rgba(16,185,129,0.2)", color: "#6ee7b7", fontWeight: "600" }}>
+                      Collaborator
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setShareModalOpen(false)}
+                style={{ padding: "9px 20px", borderRadius: "9px", background: "rgba(255,255,255,0.08)", border: "none", color: "rgba(255,255,255,0.8)", fontSize: "13px", cursor: "pointer" }}
+              >
+                Done
               </button>
             </div>
           </div>

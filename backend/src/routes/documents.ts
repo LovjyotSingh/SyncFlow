@@ -83,18 +83,120 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// GET /:id/share-link — Get the invite link for a document (owner only)
-router.get('/:id/share-link', async (req: AuthRequest, res: Response) => {
+// PUT /:id — Update document title
+router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const document = await Document.findOne({ _id: req.params.id, owner: req.userId });
+    const { title } = req.body;
+    const document = await Document.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        $or: [{ owner: req.userId }, { collaborators: req.userId }],
+      },
+      { title },
+      { new: true }
+    );
     if (!document) {
-      return res.status(403).json({ message: 'Only the document owner can get the share link' });
+      return res.status(404).json({ message: 'Document not found or access denied' });
     }
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    res.json({ shareUrl: `${frontendUrl}/doc/${document.shareToken}` });
+    res.json(document);
   } catch (error) {
-    res.status(500).json({ message: 'Error getting share link' });
+    res.status(500).json({ message: 'Error updating document' });
+  }
+});
+
+// DELETE /:id — Delete document (owner only)
+router.delete('/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const document = await Document.findOneAndDelete({
+      _id: req.params.id,
+      owner: req.userId,
+    });
+    if (!document) {
+      return res.status(403).json({ message: 'Only the document owner can delete this document' });
+    }
+    res.json({ message: 'Document deleted successfully', id: req.params.id });
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting document' });
+  }
+});
+
+// POST /:id/invite — Invite a user/friend by email
+router.post('/:id/invite', async (req: AuthRequest, res: Response) => {
+  try {
+    const { email } = req.body;
+    if (!email?.trim()) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    const document = await Document.findOne({
+      _id: req.params.id,
+      $or: [{ owner: req.userId }, { collaborators: req.userId }],
+    });
+
+    if (!document) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Check if user exists in the system
+    const { User } = await import('../models/User');
+    const targetUser = await User.findOne({ email: normalizedEmail });
+
+    if (targetUser) {
+      const isAlreadyCollaborator = document.collaborators.some(
+        (c: any) => c.toString() === targetUser._id.toString()
+      );
+      const isOwner = document.owner?.toString() === targetUser._id.toString();
+
+      if (!isAlreadyCollaborator && !isOwner) {
+        document.collaborators.push(targetUser._id as any);
+      }
+    }
+
+    if (!document.invitedEmails.includes(normalizedEmail)) {
+      document.invitedEmails.push(normalizedEmail);
+    }
+
+    await document.save();
+
+    // Return populated collaborators
+    const populated = await Document.findById(document._id)
+      .populate('owner', 'name email avatarColor')
+      .populate('collaborators', 'name email avatarColor');
+
+    res.json({
+      message: targetUser ? `Added ${targetUser.name} as collaborator` : `Invited ${normalizedEmail}`,
+      document: populated,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error inviting collaborator' });
+  }
+});
+
+// GET /:id/collaborators — Get populated list of collaborators & owner
+router.get('/:id/collaborators', async (req: AuthRequest, res: Response) => {
+  try {
+    const document = await Document.findOne({
+      _id: req.params.id,
+      $or: [{ owner: req.userId }, { collaborators: req.userId }],
+    })
+      .populate('owner', 'name email avatarColor')
+      .populate('collaborators', 'name email avatarColor');
+
+    if (!document) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+
+    res.json({
+      owner: document.owner,
+      collaborators: document.collaborators,
+      invitedEmails: document.invitedEmails,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching collaborators' });
   }
 });
 
 export default router;
+

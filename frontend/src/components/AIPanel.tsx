@@ -5,7 +5,7 @@ import {
   LucideSparkles, LucideX, LucideLoader2, LucideCopy, LucideCheck,
   LucideAlignLeft, LucideWand2, LucideCheckCheck, LucideListChecks,
   LucideScissors, LucideBriefcase, LucideLanguages, LucideClipboardList,
-  LucideSend, LucideMessageSquare, LucideZap,
+  LucideSend, LucideMessageSquare, LucideZap, LucidePlusCircle,
 } from "lucide-react";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
@@ -31,9 +31,10 @@ interface AIPanelProps {
   getEditorContent: () => string;
   isOpen: boolean;
   onClose: () => void;
+  onInsertContent?: (text: string) => void;
 }
 
-export default function AIPanel({ getEditorContent, isOpen, onClose }: AIPanelProps) {
+export default function AIPanel({ getEditorContent, isOpen, onClose, onInsertContent }: AIPanelProps) {
   const [tab, setTab] = useState<"commands" | "chat">("commands");
   const [apiKey, setApiKey] = useState("");
 
@@ -42,6 +43,7 @@ export default function AIPanel({ getEditorContent, isOpen, onClose }: AIPanelPr
   const [streaming, setStreaming] = useState(false);
   const [cmdError, setCmdError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [inserted, setInserted] = useState(false);
   const [activeCommand, setActiveCommand] = useState("");
 
   // Chat tab state
@@ -49,6 +51,8 @@ export default function AIPanel({ getEditorContent, isOpen, onClose }: AIPanelPr
   const [chatInput, setChatInput] = useState("");
   const [chatStreaming, setChatStreaming] = useState(false);
   const [chatError, setChatError] = useState("");
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const [insertedIdx, setInsertedIdx] = useState<number | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -135,6 +139,18 @@ export default function AIPanel({ getEditorContent, isOpen, onClose }: AIPanelPr
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleInsert = (textToInsert: string, isChat?: boolean, index?: number) => {
+    if (!textToInsert || !onInsertContent) return;
+    onInsertContent(textToInsert);
+    if (isChat && index !== undefined) {
+      setInsertedIdx(index);
+      setTimeout(() => setInsertedIdx(null), 2000);
+    } else {
+      setInserted(true);
+      setTimeout(() => setInserted(false), 2000);
+    }
+  };
+
   // ── Chat tab ─────────────────────────────────────────────────────────────────
   const sendChat = async () => {
     const msg = chatInput.trim();
@@ -199,7 +215,7 @@ export default function AIPanel({ getEditorContent, isOpen, onClose }: AIPanelPr
 
   return (
     <div style={{
-      width: "340px", minWidth: "340px",
+      width: "360px", minWidth: "360px",
       background: "rgba(12,12,22,0.98)",
       borderLeft: "1px solid rgba(255,255,255,0.07)",
       display: "flex", flexDirection: "column",
@@ -244,7 +260,7 @@ export default function AIPanel({ getEditorContent, isOpen, onClose }: AIPanelPr
       }}>
         {[
           { id: "commands", label: "Commands", icon: LucideZap },
-          { id: "chat",     label: "Chat",     icon: LucideMessageSquare },
+          { id: "chat",     label: "Freeform Chat", icon: LucideMessageSquare },
         ].map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -271,7 +287,7 @@ export default function AIPanel({ getEditorContent, isOpen, onClose }: AIPanelPr
           type="password"
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
-          placeholder="Gemini API key (or set in .env)"
+          placeholder="Gemini API key (optional if set in .env)"
           style={{
             width: "100%", background: "rgba(255,255,255,0.04)",
             border: "1px solid rgba(255,255,255,0.08)", borderRadius: "7px",
@@ -312,7 +328,7 @@ export default function AIPanel({ getEditorContent, isOpen, onClose }: AIPanelPr
           {streaming && !result && (
             <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "12px 14px", borderRadius: "10px", background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)" }}>
               <LucideLoader2 style={{ width: "15px", height: "15px", color: "#6366f1", animation: "spin 1s linear infinite", flexShrink: 0 }} />
-              <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>Gemini 3.7 Flash is thinking...</span>
+              <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>Gemini 3.7 Flash is analyzing...</span>
             </div>
           )}
 
@@ -329,10 +345,31 @@ export default function AIPanel({ getEditorContent, isOpen, onClose }: AIPanelPr
                   <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.5px" }}>Result</span>
                   {streaming && <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#6366f1", display: "inline-block", animation: "pulse-dot 1s ease-in-out infinite" }} />}
                 </div>
-                <button onClick={copyResult} disabled={streaming} style={{ display: "flex", alignItems: "center", gap: "4px", background: "none", border: "none", cursor: streaming ? "not-allowed" : "pointer", color: copied ? "rgba(16,185,129,0.8)" : "rgba(255,255,255,0.3)", fontSize: "11px", padding: "2px 6px", borderRadius: "4px" }}>
-                  {copied ? <LucideCheck style={{ width: "12px", height: "12px" }} /> : <LucideCopy style={{ width: "12px", height: "12px" }} />}
-                  {copied ? "Copied!" : "Copy"}
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  {onInsertContent && (
+                    <button
+                      onClick={() => handleInsert(result)}
+                      disabled={streaming}
+                      title="Insert directly into document editor"
+                      style={{
+                        display: "flex", alignItems: "center", gap: "4px",
+                        background: inserted ? "rgba(16,185,129,0.15)" : "rgba(99,102,241,0.15)",
+                        border: inserted ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(99,102,241,0.3)",
+                        cursor: streaming ? "not-allowed" : "pointer",
+                        color: inserted ? "#10b981" : "#a5b4fc",
+                        fontSize: "11px", padding: "3px 7px", borderRadius: "5px",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      {inserted ? <LucideCheck style={{ width: "11px", height: "11px" }} /> : <LucidePlusCircle style={{ width: "11px", height: "11px" }} />}
+                      {inserted ? "Inserted" : "Insert"}
+                    </button>
+                  )}
+                  <button onClick={copyResult} disabled={streaming} style={{ display: "flex", alignItems: "center", gap: "4px", background: "none", border: "none", cursor: streaming ? "not-allowed" : "pointer", color: copied ? "rgba(16,185,129,0.8)" : "rgba(255,255,255,0.4)", fontSize: "11px", padding: "2px 6px", borderRadius: "4px" }}>
+                    {copied ? <LucideCheck style={{ width: "12px", height: "12px" }} /> : <LucideCopy style={{ width: "12px", height: "12px" }} />}
+                    {copied ? "Copied" : "Copy"}
+                  </button>
+                </div>
               </div>
               <div style={{ padding: "12px 14px", fontSize: "13px", lineHeight: "1.7", color: "rgba(255,255,255,0.78)", whiteSpace: "pre-wrap", maxHeight: "320px", overflowY: "auto" }}>
                 {result}
@@ -347,28 +384,33 @@ export default function AIPanel({ getEditorContent, isOpen, onClose }: AIPanelPr
       {tab === "chat" && (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Messages */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "14px" }}>
             {chatHistory.length === 0 && (
               <div style={{ textAlign: "center", padding: "24px 16px" }}>
                 <LucideSparkles style={{ width: "24px", height: "24px", color: "rgba(99,102,241,0.5)", margin: "0 auto 10px" }} />
-                <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)", lineHeight: "1.6" }}>
-                  Ask me anything —<br />code, explanations, content, ideas
+                <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)", fontWeight: "500", marginBottom: "4px" }}>
+                  Generate Anything with Gemini
                 </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "14px", justifyContent: "center" }}>
+                <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)", lineHeight: "1.5" }}>
+                  Code in any language, technical explanations, full documents, or brainstorming.
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "16px", justifyContent: "center" }}>
                   {[
-                    "Write a REST API in Python",
-                    "Explain async/await",
-                    "SQL schema for e-commerce",
-                    "Summarize this concept: RAG",
+                    "Write an auth middleware in Node.js",
+                    "Explain WebSocket vs WebRTC",
+                    "PostgreSQL schema for SaaS",
+                    "Draft an executive pitch summary",
                   ].map((suggestion) => (
                     <button
                       key={suggestion}
                       onClick={() => { setChatInput(suggestion); inputRef.current?.focus(); }}
                       style={{
-                        padding: "5px 10px", borderRadius: "20px", border: "1px solid rgba(99,102,241,0.3)",
-                        background: "rgba(99,102,241,0.08)", color: "rgba(255,255,255,0.55)",
-                        fontSize: "10px", cursor: "pointer",
+                        padding: "6px 11px", borderRadius: "20px", border: "1px solid rgba(99,102,241,0.3)",
+                        background: "rgba(99,102,241,0.08)", color: "rgba(255,255,255,0.65)",
+                        fontSize: "11px", cursor: "pointer", transition: "all 0.15s ease",
                       }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.18)"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.08)"; }}
                     >
                       {suggestion}
                     </button>
@@ -378,19 +420,19 @@ export default function AIPanel({ getEditorContent, isOpen, onClose }: AIPanelPr
             )}
 
             {chatHistory.map((msg, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
+              <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: msg.role === "user" ? "flex-end" : "flex-start", gap: "4px" }}>
                 <div style={{
-                  maxWidth: "90%",
-                  padding: "9px 13px",
+                  maxWidth: "92%",
+                  padding: "10px 14px",
                   borderRadius: msg.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
                   background: msg.role === "user"
                     ? "linear-gradient(135deg, rgba(99,102,241,0.35), rgba(139,92,246,0.25))"
-                    : "rgba(255,255,255,0.06)",
+                    : "rgba(255,255,255,0.05)",
                   border: msg.role === "user"
                     ? "1px solid rgba(99,102,241,0.3)"
-                    : "1px solid rgba(255,255,255,0.07)",
+                    : "1px solid rgba(255,255,255,0.08)",
                   fontSize: "12px", lineHeight: "1.65",
-                  color: msg.role === "user" ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.78)",
+                  color: msg.role === "user" ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.8)",
                   whiteSpace: "pre-wrap", wordBreak: "break-word",
                 }}>
                   {msg.text || (msg.streaming ? "" : "...")}
@@ -398,6 +440,43 @@ export default function AIPanel({ getEditorContent, isOpen, onClose }: AIPanelPr
                     <span style={{ display: "inline-block", width: "2px", height: "12px", background: "#6366f1", marginLeft: "2px", verticalAlign: "text-bottom", animation: "blink-cursor 0.7s step-end infinite" }} />
                   )}
                 </div>
+
+                {/* AI response action toolbar */}
+                {msg.role === "ai" && msg.text && !msg.streaming && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", paddingLeft: "4px" }}>
+                    {onInsertContent && (
+                      <button
+                        onClick={() => handleInsert(msg.text, true, i)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: "3px",
+                          background: insertedIdx === i ? "rgba(16,185,129,0.15)" : "transparent",
+                          border: insertedIdx === i ? "1px solid rgba(16,185,129,0.3)" : "none",
+                          color: insertedIdx === i ? "#10b981" : "rgba(255,255,255,0.4)",
+                          fontSize: "10px", cursor: "pointer", padding: "2px 6px", borderRadius: "4px",
+                        }}
+                      >
+                        {insertedIdx === i ? <LucideCheck style={{ width: "10px", height: "10px" }} /> : <LucidePlusCircle style={{ width: "10px", height: "10px" }} />}
+                        {insertedIdx === i ? "Inserted into doc" : "Insert into doc"}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(msg.text);
+                        setCopiedIdx(i);
+                        setTimeout(() => setCopiedIdx(null), 2000);
+                      }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: "3px",
+                        background: "transparent", border: "none",
+                        color: copiedIdx === i ? "#10b981" : "rgba(255,255,255,0.4)",
+                        fontSize: "10px", cursor: "pointer", padding: "2px 6px", borderRadius: "4px",
+                      }}
+                    >
+                      {copiedIdx === i ? <LucideCheck style={{ width: "10px", height: "10px" }} /> : <LucideCopy style={{ width: "10px", height: "10px" }} />}
+                      {copiedIdx === i ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
 
@@ -418,7 +497,7 @@ export default function AIPanel({ getEditorContent, isOpen, onClose }: AIPanelPr
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask anything... (Enter to send, Shift+Enter for newline)"
+                placeholder="Ask Gemini anything... (Enter to send, Shift+Enter for newline)"
                 rows={1}
                 style={{
                   flex: 1, background: "none", border: "none", outline: "none",
@@ -443,8 +522,8 @@ export default function AIPanel({ getEditorContent, isOpen, onClose }: AIPanelPr
                   : <LucideSend style={{ width: "13px", height: "13px", color: "white" }} />}
               </button>
             </div>
-            <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", marginTop: "6px", textAlign: "center" }}>
-              Powered by Gemini 3.7 Flash · Context-aware conversation
+            <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.25)", marginTop: "6px", textAlign: "center" }}>
+              Powered by Gemini 3.7 Flash · Insert directly into document
             </div>
           </div>
         </div>

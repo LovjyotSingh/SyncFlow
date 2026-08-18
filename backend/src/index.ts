@@ -18,7 +18,7 @@ const server = http.createServer(app);
 // Enable CORS — accept localhost in dev, production URL in prod
 const allowedOrigins = [
   'http://localhost:3000',
-  process.env.FRONTEND_URL,
+  process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : null,
 ].filter(Boolean) as string[];
 
 app.use(cors({
@@ -64,7 +64,7 @@ app.use('/api', aiRoutes);
 // Initialize Socket.io for real-time syncing
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
   },
 });

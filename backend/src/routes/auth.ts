@@ -23,6 +23,9 @@ function signToken(userId: string) {
 // ─── Reusable auth middleware ─────────────────────────────────────────────────
 export interface AuthRequest extends Request {
   userId?: string;
+  body: any;
+  params: any;
+  headers: any;
 }
 
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {

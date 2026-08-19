@@ -255,5 +255,57 @@ router.delete('/:id/collaborators/:userId', async (req: AuthRequest, res: Respon
   }
 });
 
+// POST /:id/revoke-link — Revoke & regenerate share link (owner only)
+router.post('/:id/revoke-link', async (req: AuthRequest, res: Response) => {
+  try {
+    const { randomUUID } = await import('crypto');
+    const document = await Document.findOne({
+      _id: req.params.id,
+      owner: req.userId,
+    });
+
+    if (!document) {
+      return res.status(403).json({ message: 'Only the document owner can revoke the share link' });
+    }
+
+    document.shareToken = randomUUID();
+    await document.save();
+
+    res.json({
+      message: 'Share link revoked and regenerated',
+      shareToken: document.shareToken,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error revoking share link' });
+  }
+});
+
+// POST /:id/kick-all — Kick all collaborators / make workspace private (owner only)
+router.post('/:id/kick-all', async (req: AuthRequest, res: Response) => {
+  try {
+    const { randomUUID } = await import('crypto');
+    const document = await Document.findOne({
+      _id: req.params.id,
+      owner: req.userId,
+    });
+
+    if (!document) {
+      return res.status(403).json({ message: 'Only the document owner can kick collaborators' });
+    }
+
+    document.collaborators = [];
+    document.shareToken = randomUUID();
+    await document.save();
+
+    res.json({
+      message: 'All collaborators have been kicked and workspace made private',
+      shareToken: document.shareToken,
+      collaborators: [],
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error kicking collaborators' });
+  }
+});
+
 export default router;
 

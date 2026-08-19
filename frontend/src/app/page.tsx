@@ -52,9 +52,17 @@ export default function Home() {
   // UI Modals & Dropdowns
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [joinModalOpen, setJoinModalOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Join Document states
+  const [joinInput, setJoinInput] = useState("");
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState("");
+  const [joinSuccess, setJoinSuccess] = useState("");
 
   // Share / Collaborator states
   const [inviteEmail, setInviteEmail] = useState("");
@@ -250,6 +258,77 @@ export default function Home() {
     }
   };
 
+  // ── Join Workspace by Share Link / Token ───────────────────────────────────
+  const handleJoinDocument = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const raw = joinInput.trim();
+    if (!raw) return;
+
+    setJoining(true);
+    setJoinError("");
+    setJoinSuccess("");
+
+    // Extract token from full URL (e.g. https://domain.com/doc/TOKEN), relative URL (/doc/TOKEN), or raw token
+    let token = raw;
+    const docMatch = raw.match(/\/doc\/([a-zA-Z0-9_-]+)/);
+    if (docMatch && docMatch[1]) {
+      token = docMatch[1];
+    } else {
+      token = raw.split("?")[0].split("#")[0].replace(/^\/+|\/+$/g, "");
+    }
+
+    const authToken = getToken();
+    if (!authToken) {
+      setJoinError("You must be signed in to join a workspace.");
+      setJoining(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/documents/share/${token}`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+
+      if (res.status === 404) {
+        setJoinError("Workspace not found or invite link has expired.");
+        setJoining(false);
+        return;
+      }
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        setJoinError(errData.message || "Failed to join workspace.");
+        setJoining(false);
+        return;
+      }
+
+      const joinedDoc: DocumentItem = await res.json();
+
+      setDocuments((prev) => {
+        const exists = prev.some((d) => d._id === joinedDoc._id);
+        if (exists) {
+          return prev.map((d) => (d._id === joinedDoc._id ? joinedDoc : d));
+        }
+        return [joinedDoc, ...prev];
+      });
+
+      setActiveDocId(joinedDoc._id);
+      setDocTitle(joinedDoc.title || "Shared Workspace");
+      setJoinSuccess(`Joined "${joinedDoc.title || "Shared Workspace"}" successfully!`);
+      setToastMessage(`Joined "${joinedDoc.title || "Shared Workspace"}" as collaborator`);
+      setTimeout(() => setToastMessage(null), 4000);
+
+      setTimeout(() => {
+        setJoinModalOpen(false);
+        setJoinInput("");
+        setJoinSuccess("");
+      }, 700);
+    } catch {
+      setJoinError("Network error. Please check your connection.");
+    } finally {
+      setJoining(false);
+    }
+  };
+
   // ── Filtered Documents ──────────────────────────────────────────────────────
   const filteredDocuments = documents.filter((doc) => {
     const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase());
@@ -293,7 +372,7 @@ export default function Home() {
         display: "flex", flexDirection: "column",
         position: "relative", zIndex: 20,
       }}>
-        {/* Logo & New Doc Button */}
+        {/* Logo & New Doc / Join Doc Buttons */}
         <div style={{ padding: "18px 18px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <div style={{
@@ -306,20 +385,38 @@ export default function Home() {
             <span style={{ color: "white", fontWeight: "700", fontSize: "15px", letterSpacing: "-0.3px" }}>SyncFlow</span>
           </div>
 
-          <button
-            onClick={createNewDocument}
-            title="Create new document"
-            style={{
-              width: "28px", height: "28px", borderRadius: "8px",
-              background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)",
-              color: "#a5b4fc", display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: "pointer", transition: "all 0.15s ease",
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.3)"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; }}
-          >
-            <LucidePlus style={{ width: "15px", height: "15px" }} />
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <button
+              onClick={() => setJoinModalOpen(true)}
+              title="Join workspace via share link"
+              style={{
+                height: "28px", padding: "0 8px", borderRadius: "8px",
+                background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
+                color: "rgba(255,255,255,0.8)", display: "flex", alignItems: "center", gap: "4px",
+                cursor: "pointer", fontSize: "11px", fontWeight: "600", transition: "all 0.15s ease",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.12)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)"; }}
+            >
+              <LucideLink2 style={{ width: "12px", height: "12px", color: "#a5b4fc" }} />
+              <span>Join</span>
+            </button>
+
+            <button
+              onClick={createNewDocument}
+              title="Create new document"
+              style={{
+                width: "28px", height: "28px", borderRadius: "8px",
+                background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)",
+                color: "#a5b4fc", display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer", transition: "all 0.15s ease",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.3)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; }}
+            >
+              <LucidePlus style={{ width: "15px", height: "15px" }} />
+            </button>
+          </div>
         </div>
 
         {/* Real-time Search */}
@@ -370,8 +467,22 @@ export default function Home() {
         {/* Dynamic Document list */}
         <div style={{ padding: "4px 8px", flex: 1, overflowY: "auto" }}>
           {filteredDocuments.length === 0 ? (
-            <div style={{ padding: "20px 10px", textAlign: "center", color: "rgba(255,255,255,0.3)", fontSize: "12px" }}>
-              {searchQuery ? "No matching documents" : "No documents found"}
+            <div style={{ padding: "24px 10px", textAlign: "center" }}>
+              <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "12px", marginBottom: "8px" }}>
+                {searchQuery ? "No matching documents" : docFilter === "shared" ? "No shared documents yet" : "No documents found"}
+              </div>
+              {docFilter === "shared" && !searchQuery && (
+                <button
+                  onClick={() => setJoinModalOpen(true)}
+                  style={{
+                    padding: "6px 12px", borderRadius: "6px",
+                    background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)",
+                    color: "#a5b4fc", fontSize: "11px", fontWeight: "600", cursor: "pointer",
+                  }}
+                >
+                  Join via Share Link
+                </button>
+              )}
             </div>
           ) : (
             filteredDocuments.map((doc) => (
@@ -520,6 +631,25 @@ export default function Home() {
             >
               <LucideSparkles style={{ width: "13px", height: "13px" }} />
               Gemini AI
+            </button>
+
+            {/* Join Shared Workspace Button */}
+            <button
+              onClick={() => setJoinModalOpen(true)}
+              title="Join shared document via link or invite code"
+              style={{
+                display: "flex", alignItems: "center", gap: "6px", padding: "7px 13px", borderRadius: "8px",
+                background: "rgba(255,255,255,0.07)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                color: "rgba(255,255,255,0.8)",
+                fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none",
+                transition: "all 0.15s ease",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.12)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.07)"; }}
+            >
+              <LucideUserPlus style={{ width: "13px", height: "13px", color: "#a5b4fc" }} />
+              Join Workspace
             </button>
 
             {/* Quick Copy Link Button */}
@@ -879,6 +1009,147 @@ export default function Home() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Join Workspace Modal ── */}
+      {joinModalOpen && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 100,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
+          }}
+          onClick={() => setJoinModalOpen(false)}
+        >
+          <div
+            style={{
+              background: "rgba(15,15,25,0.98)", border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: "20px", padding: "28px", width: "450px",
+              boxShadow: "0 24px 80px rgba(0,0,0,0.8)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
+              <div style={{
+                width: "40px", height: "40px", borderRadius: "12px",
+                background: "linear-gradient(135deg, #6366f1, #06b6d4)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "0 0 20px rgba(99,102,241,0.4)"
+              }}>
+                <LucideLink2 style={{ width: "18px", height: "18px", color: "white" }} />
+              </div>
+              <div>
+                <div style={{ color: "rgba(255,255,255,0.95)", fontWeight: "700", fontSize: "17px" }}>Join Shared Workspace</div>
+                <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "12px" }}>Paste an invite link or token to collaborate in real-time</div>
+              </div>
+            </div>
+
+            <form onSubmit={handleJoinDocument} style={{ marginTop: "16px" }}>
+              <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginBottom: "6px", fontWeight: "600", textTransform: "uppercase" }}>
+                Share Link or Invite Code
+              </div>
+              <div style={{ position: "relative", marginBottom: "12px" }}>
+                <input
+                  type="text"
+                  placeholder="e.g. https://syncflow.com/doc/... or share code"
+                  value={joinInput}
+                  onChange={(e) => {
+                    setJoinInput(e.target.value);
+                    setJoinError("");
+                  }}
+                  autoFocus
+                  style={{
+                    width: "100%", background: "rgba(255,255,255,0.05)",
+                    border: joinError ? "1px solid rgba(244,63,94,0.6)" : "1px solid rgba(255,255,255,0.12)",
+                    borderRadius: "10px", padding: "11px 70px 11px 12px", color: "rgba(255,255,255,0.95)",
+                    fontSize: "13px", outline: "none", boxSizing: "border-box",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const text = await navigator.clipboard.readText();
+                      if (text) {
+                        setJoinInput(text.trim());
+                        setJoinError("");
+                      }
+                    } catch {}
+                  }}
+                  style={{
+                    position: "absolute", right: "6px", top: "7px",
+                    padding: "4px 8px", borderRadius: "6px",
+                    background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)",
+                    color: "rgba(255,255,255,0.7)", fontSize: "11px", fontWeight: "600",
+                    cursor: "pointer",
+                  }}
+                >
+                  Paste
+                </button>
+              </div>
+
+              {joinError && (
+                <div style={{ fontSize: "12px", color: "#f43f5e", marginBottom: "14px", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span>⚠️ {joinError}</span>
+                </div>
+              )}
+
+              {joinSuccess && (
+                <div style={{ fontSize: "12px", color: "#10b981", marginBottom: "14px", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span>✓ {joinSuccess}</span>
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "20px" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setJoinModalOpen(false);
+                    setJoinInput("");
+                    setJoinError("");
+                  }}
+                  style={{
+                    padding: "10px 18px", borderRadius: "9px",
+                    background: "rgba(255,255,255,0.06)", border: "none",
+                    color: "rgba(255,255,255,0.7)", fontSize: "13px", cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={joining || !joinInput.trim()}
+                  style={{
+                    padding: "10px 22px", borderRadius: "9px",
+                    background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                    border: "none", color: "white", fontSize: "13px", fontWeight: "600",
+                    cursor: joining || !joinInput.trim() ? "not-allowed" : "pointer",
+                    boxShadow: "0 0 20px rgba(99,102,241,0.4)",
+                    opacity: joining || !joinInput.trim() ? 0.6 : 1,
+                    display: "flex", alignItems: "center", gap: "6px",
+                  }}
+                >
+                  {joining ? "Joining..." : "Join Workspace"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Toast Notification ── */}
+      {toastMessage && (
+        <div style={{
+          position: "fixed", bottom: "24px", right: "24px", zIndex: 110,
+          background: "rgba(15,23,42,0.95)", border: "1px solid rgba(99,102,241,0.4)",
+          borderRadius: "12px", padding: "12px 18px", display: "flex", alignItems: "center", gap: "10px",
+          boxShadow: "0 10px 40px rgba(0,0,0,0.6), 0 0 20px rgba(99,102,241,0.2)",
+          color: "white", fontSize: "13px", fontWeight: "500",
+        }}>
+          <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#10b981", boxShadow: "0 0 8px #10b981" }} />
+          {toastMessage}
         </div>
       )}
 

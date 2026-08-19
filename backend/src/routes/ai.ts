@@ -1,15 +1,15 @@
 import { Router } from 'express';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 
 const router = Router();
 
-// Primary and fallback models in order of priority (gemini-1.5-flash is stable and fast)
+// Primary and fallback models in order of priority
 const CANDIDATE_MODELS = [
   process.env.GEMINI_MODEL,
+  'gemini-2.5-flash',
   'gemini-1.5-flash',
-  'gemini-1.5-flash-8b',
-  'gemini-1.5-pro',
   'gemini-2.0-flash',
+  'gemini-1.5-pro',
 ].filter(Boolean) as string[];
 
 const COMMANDS: Record<string, string> = {
@@ -40,33 +40,28 @@ Format as a checklist with [ ] prefix for each item. Group by owner if mentioned
 
 function formatErrorMessage(error: any): string {
   const msg = error?.message || '';
-  if (msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')) {
-    return 'Invalid Gemini API key. Please check your key at aistudio.google.com';
+  if (msg.includes('API_KEY_INVALID') || msg.includes('API key not valid') || msg.includes('403')) {
+    return 'Invalid Gemini API key. Please check GEMINI_API_KEY in backend .env';
   }
   if (msg.includes('503') || msg.includes('high demand') || msg.includes('Service Unavailable')) {
     return 'Google Gemini servers are currently experiencing high demand. Please try again in a few seconds.';
   }
   if (msg.includes('quota') || msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
-    return 'API rate limit or quota reached. Please try again in a moment or add your own free Gemini API key.';
+    return 'API rate limit or quota reached. Please try again in a moment.';
   }
   return msg || 'AI request failed';
 }
 
 async function executeWithModelFallback<T>(
-  genAI: GoogleGenerativeAI,
-  systemInstruction: string,
-  fn: (model: any, modelName: string) => Promise<T>
+  ai: GoogleGenAI,
+  fn: (modelName: string) => Promise<T>
 ): Promise<T> {
   const uniqueModels = Array.from(new Set(CANDIDATE_MODELS));
   let lastError: any = null;
 
   for (const modelName of uniqueModels) {
     try {
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        systemInstruction,
-      });
-      return await fn(model, modelName);
+      return await fn(modelName);
     } catch (err: any) {
       lastError = err;
       const isRecoverable =
@@ -82,7 +77,7 @@ async function executeWithModelFallback<T>(
         err.message?.includes('overloaded');
 
       if (isRecoverable) {
-        console.warn(`⚠️ Model "${modelName}" unavailable (${err.message?.slice(0, 100)}). Trying next candidate model...`);
+        console.warn(`⚠️ Model "${modelName}" unavailable (${err.message?.slice(0, 100)}). Trying next model...`);
         continue;
       }
       throw err;
@@ -95,16 +90,16 @@ async function executeWithModelFallback<T>(
 // POST /api/ai — Standard (non-streaming) for simple use
 router.post('/ai', async (req, res) => {
   try {
-    const { command, content, apiKey, prompt: customPrompt } = req.body;
+    const { command, content, prompt: customPrompt } = req.body;
 
     if (!content) {
       return res.status(400).json({ error: 'content is required' });
     }
 
-    const key = apiKey || process.env.GEMINI_API_KEY;
+    const key = process.env.GEMINI_API_KEY;
     if (!key) {
       return res.status(400).json({
-        error: 'No Gemini API key provided. Add GEMINI_API_KEY to your backend .env file or get one free at aistudio.google.com',
+        error: 'No Gemini API key provided in backend .env (GEMINI_API_KEY)',
       });
     }
 
@@ -113,15 +108,17 @@ router.post('/ai', async (req, res) => {
       return res.status(400).json({ error: `Unknown command. Valid: ${Object.keys(COMMANDS).join(', ')}` });
     }
 
-    const genAI = new GoogleGenerativeAI(key);
-    const result = await executeWithModelFallback(
-      genAI,
-      'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
-      async (model, modelName) => {
-        const response = await model.generateContent(`${systemPrompt}\n\n---\n\n${content}`);
-        return { text: response.response.text(), model: modelName };
-      }
-    );
+    const ai = new GoogleGenAI({ apiKey: key });
+    const result = await executeWithModelFallback(ai, async (modelName) => {
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: `${systemPrompt}\n\n---\n\n${content}`,
+        config: {
+          systemInstruction: 'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
+        },
+      });
+      return { text: response.text || '', model: modelName };
+    });
 
     res.json({ result: result.text, model: result.model });
   } catch (error: any) {
@@ -133,16 +130,16 @@ router.post('/ai', async (req, res) => {
 // POST /api/ai/stream — Streaming (Server-Sent Events) for real-time word-by-word output
 router.post('/ai/stream', async (req, res) => {
   try {
-    const { command, content, apiKey, prompt: customPrompt } = req.body;
+    const { command, content, prompt: customPrompt } = req.body;
 
     if (!content) {
       res.status(400).json({ error: 'content is required' });
       return;
     }
 
-    const key = apiKey || process.env.GEMINI_API_KEY;
+    const key = process.env.GEMINI_API_KEY;
     if (!key) {
-      res.status(400).json({ error: 'No Gemini API key. Add GEMINI_API_KEY to .env or pass apiKey in request.' });
+      res.status(400).json({ error: 'No Gemini API key in backend .env (GEMINI_API_KEY)' });
       return;
     }
 
@@ -159,17 +156,19 @@ router.post('/ai/stream', async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.flushHeaders();
 
-    const genAI = new GoogleGenerativeAI(key);
-    const streamResult = await executeWithModelFallback(
-      genAI,
-      'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
-      async (model) => {
-        return await model.generateContentStream(`${systemPrompt}\n\n---\n\n${content}`);
-      }
-    );
+    const ai = new GoogleGenAI({ apiKey: key });
+    const streamResult = await executeWithModelFallback(ai, async (modelName) => {
+      return await ai.models.generateContentStream({
+        model: modelName,
+        contents: `${systemPrompt}\n\n---\n\n${content}`,
+        config: {
+          systemInstruction: 'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
+        },
+      });
+    });
 
-    for await (const chunk of streamResult.stream) {
-      const text = chunk.text();
+    for await (const chunk of streamResult) {
+      const text = chunk.text;
       if (text) {
         res.write(`data: ${JSON.stringify({ text })}\n\n`);
       }
@@ -185,19 +184,18 @@ router.post('/ai/stream', async (req, res) => {
 });
 
 // POST /api/ai/chat/stream — Free-form conversational AI (code, explanations, anything)
-// Accepts: { message, history?: [{role, text}], apiKey? }
 router.post('/ai/chat/stream', async (req, res) => {
   try {
-    const { message, history = [], apiKey } = req.body;
+    const { message, history = [] } = req.body;
 
     if (!message?.trim()) {
       res.status(400).json({ error: 'message is required' });
       return;
     }
 
-    const key = apiKey || process.env.GEMINI_API_KEY;
+    const key = process.env.GEMINI_API_KEY;
     if (!key) {
-      res.status(400).json({ error: 'No Gemini API key. Add GEMINI_API_KEY to .env or pass apiKey in request.' });
+      res.status(400).json({ error: 'No Gemini API key in backend .env (GEMINI_API_KEY)' });
       return;
     }
 
@@ -207,7 +205,7 @@ router.post('/ai/chat/stream', async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.flushHeaders();
 
-    const genAI = new GoogleGenerativeAI(key);
+    const ai = new GoogleGenAI({ apiKey: key });
     const systemInstruction =
       'You are SyncFlow AI — a brilliant, versatile assistant embedded in a collaborative document editor. ' +
       'You can write and explain code in any language, answer technical questions, write essays, ' +
@@ -215,22 +213,24 @@ router.post('/ai/chat/stream', async (req, res) => {
       'Be concise but thorough. Use markdown formatting (code blocks, headers, bullet points) where it improves clarity.';
 
     // Build conversation history for multi-turn context
-    const chatHistory = (history as { role: string; text: string }[]).map((msg) => ({
+    const contents = (history as { role: string; text: string }[]).map((msg) => ({
       role: msg.role === 'user' ? 'user' : 'model',
       parts: [{ text: msg.text }],
     }));
+    contents.push({ role: 'user', parts: [{ text: message }] });
 
-    const streamResult = await executeWithModelFallback(
-      genAI,
-      systemInstruction,
-      async (model) => {
-        const chat = model.startChat({ history: chatHistory });
-        return await chat.sendMessageStream(message);
-      }
-    );
+    const streamResult = await executeWithModelFallback(ai, async (modelName) => {
+      return await ai.models.generateContentStream({
+        model: modelName,
+        contents,
+        config: {
+          systemInstruction,
+        },
+      });
+    });
 
-    for await (const chunk of streamResult.stream) {
-      const text = chunk.text();
+    for await (const chunk of streamResult) {
+      const text = chunk.text;
       if (text) {
         res.write(`data: ${JSON.stringify({ text })}\n\n`);
       }

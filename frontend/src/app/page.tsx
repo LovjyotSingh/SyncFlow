@@ -222,6 +222,78 @@ export default function Home() {
     }
   };
 
+  const handleLeaveDocument = async (docIdToLeave?: string) => {
+    const targetId = docIdToLeave || activeDocId;
+    if (!targetId) return;
+    const targetDoc = documents.find((d) => d._id === targetId);
+    const title = targetDoc?.title || "this shared workspace";
+    if (!confirm(`Are you sure you want to exit collaboration and leave "${title}"?`)) return;
+
+    const token = getToken();
+    if (!token) return;
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/documents/${targetId}/leave`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        const remaining = documents.filter((d) => d._id !== targetId);
+        setDocuments(remaining);
+        setToastMessage(`Left "${title}" successfully`);
+        setTimeout(() => setToastMessage(null), 4000);
+
+        if (targetId === activeDocId) {
+          if (remaining.length > 0) {
+            setActiveDocId(remaining[0]._id);
+            setDocTitle(remaining[0].title);
+          } else {
+            createNewDocument();
+          }
+        }
+        setMoreMenuOpen(false);
+        setShareModalOpen(false);
+      } else {
+        const text = await res.text();
+        const err = text && text.trim().startsWith("{") ? JSON.parse(text) : {};
+        alert(err.message || "Failed to leave workspace");
+      }
+    } catch {
+      alert("Network error leaving workspace");
+    }
+  };
+
+  const handleRemoveCollaborator = async (userId: string, userName: string) => {
+    if (!activeDocId) return;
+    if (!confirm(`Remove ${userName} from this workspace?`)) return;
+
+    const token = getToken();
+    if (!token) return;
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/documents/${activeDocId}/collaborators/${userId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        setCollaboratorsList((prev) => ({
+          ...prev,
+          collaborators: prev.collaborators?.filter((c) => c._id !== userId) || [],
+        }));
+        setToastMessage(`Removed ${userName} from workspace`);
+        setTimeout(() => setToastMessage(null), 3000);
+      } else {
+        const text = await res.text();
+        const err = text && text.trim().startsWith("{") ? JSON.parse(text) : {};
+        alert(err.message || "Failed to remove collaborator");
+      }
+    } catch {
+      alert("Network error removing collaborator");
+    }
+  };
+
   const exportMarkdown = () => {
     const text = editorRef.current?.getText() || "";
     const blob = new Blob([`# ${docTitle}\n\n${text}`], { type: "text/markdown" });
@@ -371,6 +443,8 @@ export default function Home() {
   });
 
   const activeDoc = documents.find((d) => d._id === activeDocId);
+  const isOwner = activeDoc ? activeDoc.owner === currentUser?.id : true;
+  const isCollaborator = activeDoc ? !isOwner : false;
   const shareUrl = typeof window !== "undefined" && activeDoc
     ? `${window.location.origin}/doc/${activeDoc.shareToken}`
     : "";
@@ -396,37 +470,41 @@ export default function Home() {
 
       {/* ─── SIDEBAR ─── */}
       <aside style={{
-        width: "270px", minWidth: "270px",
-        background: "rgba(255,255,255,0.03)",
+        width: "260px", minWidth: "260px",
+        background: "rgba(10,10,20,0.85)",
         borderRight: "1px solid rgba(255,255,255,0.07)",
-        backdropFilter: "blur(20px)",
         display: "flex", flexDirection: "column",
+        backdropFilter: "blur(20px)",
         position: "relative", zIndex: 20,
       }}>
-        {/* Logo & New Doc / Join Doc Buttons */}
-        <div style={{ padding: "18px 18px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        {/* Workspace Brand Header */}
+        <div style={{
+          padding: "16px 18px",
+          borderBottom: "1px solid rgba(255,255,255,0.07)",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
             <div style={{
-              width: "32px", height: "32px",
+              width: "28px", height: "28px", borderRadius: "8px",
               background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
-              borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: "0 0 16px rgba(99,102,241,0.5), inset 0 1px 0 rgba(255,255,255,0.2)",
-              fontSize: "13px", fontWeight: "800", color: "white",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "12px", fontWeight: "900", color: "white",
+              boxShadow: "0 0 16px rgba(99,102,241,0.5)",
             }}>SF</div>
-            <span style={{ color: "white", fontWeight: "700", fontSize: "15px", letterSpacing: "-0.3px" }}>SyncFlow</span>
+            <span style={{ color: "white", fontWeight: "700", fontSize: "14px", letterSpacing: "-0.3px" }}>SyncFlow</span>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <button
               onClick={() => setJoinModalOpen(true)}
-              title="Join workspace via share link"
+              title="Join shared document via link"
               style={{
-                height: "28px", padding: "0 8px", borderRadius: "8px",
-                background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
-                color: "rgba(255,255,255,0.8)", display: "flex", alignItems: "center", gap: "4px",
-                cursor: "pointer", fontSize: "11px", fontWeight: "600", transition: "all 0.15s ease",
+                padding: "4px 8px", borderRadius: "7px",
+                background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+                color: "#a5b4fc", display: "flex", alignItems: "center", gap: "4px",
+                fontSize: "11px", fontWeight: "600", cursor: "pointer", transition: "all 0.15s ease",
               }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.12)"; }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.2)"; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)"; }}
             >
               <LucideLink2 style={{ width: "12px", height: "12px", color: "#a5b4fc" }} />
@@ -437,7 +515,7 @@ export default function Home() {
               onClick={createNewDocument}
               title="Create new document"
               style={{
-                width: "28px", height: "28px", borderRadius: "8px",
+                width: "28px", height: "28px", borderRadius: "7px",
                 background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)",
                 color: "#a5b4fc", display: "flex", alignItems: "center", justifyContent: "center",
                 cursor: "pointer", transition: "all 0.15s ease",
@@ -539,9 +617,27 @@ export default function Home() {
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                 }}>{doc.title}</span>
                 {doc.owner !== currentUser?.id && (
-                  <span style={{ fontSize: "9px", padding: "1px 5px", borderRadius: "4px", background: "rgba(99,102,241,0.2)", color: "#a5b4fc" }}>
-                    Shared
-                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                    <span style={{ fontSize: "9px", padding: "1px 5px", borderRadius: "4px", background: "rgba(99,102,241,0.2)", color: "#a5b4fc" }}>
+                      Shared
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleLeaveDocument(doc._id);
+                      }}
+                      title="Exit collaboration and remove from your list"
+                      style={{
+                        background: "none", border: "none", cursor: "pointer",
+                        color: "rgba(244,63,94,0.6)", padding: "2px 4px", borderRadius: "4px",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#f43f5e"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "rgba(244,63,94,0.6)"; }}
+                    >
+                      <LucideLogOut style={{ width: "11px", height: "11px" }} />
+                    </button>
+                  </div>
                 )}
               </button>
             ))
@@ -644,6 +740,25 @@ export default function Home() {
                   </div>
                 ))}
               </div>
+            )}
+
+            {/* Exit Collaboration Button (for Collaborators) */}
+            {isCollaborator && (
+              <button
+                onClick={() => handleLeaveDocument()}
+                title="Exit collaboration and leave this workspace"
+                style={{
+                  display: "flex", alignItems: "center", gap: "6px", padding: "7px 13px", borderRadius: "8px",
+                  background: "rgba(244,63,94,0.12)", border: "1px solid rgba(244,63,94,0.3)",
+                  color: "#fca5a5", fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none",
+                  transition: "all 0.15s ease",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(244,63,94,0.22)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(244,63,94,0.12)"; }}
+              >
+                <LucideLogOut style={{ width: "13px", height: "13px", color: "#f43f5e" }} />
+                <span>Exit Collaboration</span>
+              </button>
             )}
 
             {/* AI Assistant Button */}
@@ -779,20 +894,37 @@ export default function Home() {
                     Clear Document
                   </button>
                   <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", margin: "4px 0" }} />
-                  <button
-                    onClick={deleteActiveDocument}
-                    style={{
-                      width: "100%", display: "flex", alignItems: "center", gap: "8px",
-                      padding: "8px 10px", borderRadius: "7px", border: "none",
-                      background: "transparent", color: "#f43f5e", fontSize: "12px",
-                      cursor: "pointer", textAlign: "left",
-                    }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(244,63,94,0.15)"; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-                  >
-                    <LucideTrash2 style={{ width: "13px", height: "13px" }} />
-                    Delete Document
-                  </button>
+                  {isCollaborator ? (
+                    <button
+                      onClick={() => handleLeaveDocument()}
+                      style={{
+                        width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                        padding: "8px 10px", borderRadius: "7px", border: "none",
+                        background: "transparent", color: "#f43f5e", fontSize: "12px",
+                        cursor: "pointer", textAlign: "left",
+                      }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(244,63,94,0.15)"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                    >
+                      <LucideLogOut style={{ width: "13px", height: "13px" }} />
+                      Exit Collaboration
+                    </button>
+                  ) : (
+                    <button
+                      onClick={deleteActiveDocument}
+                      style={{
+                        width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                        padding: "8px 10px", borderRadius: "7px", border: "none",
+                        background: "transparent", color: "#f43f5e", fontSize: "12px",
+                        cursor: "pointer", textAlign: "left",
+                      }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(244,63,94,0.15)"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                    >
+                      <LucideTrash2 style={{ width: "13px", height: "13px" }} />
+                      Delete Document
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -923,6 +1055,31 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Collaborator Leave Banner */}
+            {isCollaborator && (
+              <div style={{
+                background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.25)",
+                borderRadius: "10px", padding: "10px 14px", marginBottom: "16px",
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px",
+              }}>
+                <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.8)" }}>
+                  You are collaborating on this workspace.
+                </span>
+                <button
+                  onClick={() => handleLeaveDocument()}
+                  style={{
+                    padding: "5px 10px", borderRadius: "6px",
+                    background: "rgba(244,63,94,0.15)", border: "1px solid rgba(244,63,94,0.3)",
+                    color: "#fca5a5", fontSize: "11px", fontWeight: "600", cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: "4px",
+                  }}
+                >
+                  <LucideLogOut style={{ width: "11px", height: "11px" }} />
+                  Leave Workspace
+                </button>
+              </div>
+            )}
+
             {/* Invite by Email */}
             <form onSubmit={sendInvite} style={{ marginBottom: "18px" }}>
               <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginBottom: "6px", fontWeight: "600", textTransform: "uppercase" }}>
@@ -1023,9 +1180,26 @@ export default function Home() {
                         <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>{c.email}</div>
                       </div>
                     </div>
-                    <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "4px", background: "rgba(16,185,129,0.2)", color: "#6ee7b7", fontWeight: "600" }}>
-                      Collaborator
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "4px", background: "rgba(16,185,129,0.2)", color: "#6ee7b7", fontWeight: "600" }}>
+                        Collaborator
+                      </span>
+                      {isOwner && c._id !== currentUser?.id && (
+                        <button
+                          onClick={() => handleRemoveCollaborator(c._id, c.name)}
+                          title={`Remove ${c.name} from workspace`}
+                          style={{
+                            background: "none", border: "none", cursor: "pointer",
+                            color: "rgba(244,63,94,0.6)", padding: "3px 5px", borderRadius: "4px",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                          }}
+                          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#f43f5e"; }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "rgba(244,63,94,0.6)"; }}
+                        >
+                          <LucideTrash2 style={{ width: "12px", height: "12px" }} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

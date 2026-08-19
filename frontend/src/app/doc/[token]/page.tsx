@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { isLoggedIn, getToken, BACKEND_URL } from "@/lib/auth";
-import { LucideLoader2, LucideShieldX, LucideSparkles, LucideChevronRight } from "lucide-react";
+import { LucideLoader2, LucideShieldX, LucideSparkles, LucideChevronRight, LucideLogOut } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { Presence, EditorHandle } from "@/components/Editor";
 import AIPanel from "@/components/AIPanel";
@@ -26,6 +26,21 @@ export default function SharedDocPage() {
 
   const handlePresenceChange = useCallback((users: Presence[]) => setPresence(users), []);
   const handleConnectionChange = useCallback((connected: boolean) => setIsConnected(connected), []);
+
+  const handleLeave = async () => {
+    if (!confirm(`Are you sure you want to exit collaboration on "${docTitle}"?`)) return;
+    try {
+      if (docId) {
+        await fetch(`${BACKEND_URL}/api/documents/${docId}/leave`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${getToken()}` },
+        });
+      }
+      router.push("/");
+    } catch {
+      router.push("/");
+    }
+  };
 
   useEffect(() => {
     if (!isLoggedIn()) {
@@ -151,6 +166,23 @@ export default function SharedDocPage() {
             >
               <LucideSparkles style={{ width: "13px", height: "13px" }} />
               Gemini AI
+            </button>
+
+            {/* Exit Collaboration Button */}
+            <button
+              onClick={handleLeave}
+              title="Exit collaboration and leave this shared workspace"
+              style={{
+                display: "flex", alignItems: "center", gap: "6px", padding: "7px 13px", borderRadius: "8px",
+                background: "rgba(244,63,94,0.12)", border: "1px solid rgba(244,63,94,0.3)",
+                color: "#fca5a5", fontSize: "12px", fontWeight: "500", cursor: "pointer", outline: "none",
+                transition: "all 0.15s ease",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(244,63,94,0.22)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(244,63,94,0.12)"; }}
+            >
+              <LucideLogOut style={{ width: "13px", height: "13px", color: "#f43f5e" }} />
+              <span>Exit Collaboration</span>
             </button>
 
             <button

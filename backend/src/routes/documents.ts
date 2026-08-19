@@ -198,5 +198,62 @@ router.get('/:id/collaborators', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// POST /:id/leave — Exit collaboration / leave a shared workspace
+router.post('/:id/leave', async (req: AuthRequest, res: Response) => {
+  try {
+    const document = await Document.findById(req.params.id);
+    if (!document) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+
+    const isOwner = document.owner?.toString() === req.userId;
+    if (isOwner) {
+      return res.status(400).json({ message: 'Owner cannot leave their own document. Delete it instead.' });
+    }
+
+    // Remove user from collaborators
+    document.collaborators = document.collaborators.filter(
+      (c: any) => c.toString() !== req.userId
+    );
+    await document.save();
+
+    res.json({ message: 'Left workspace successfully', id: req.params.id });
+  } catch (error) {
+    res.status(500).json({ message: 'Error leaving workspace' });
+  }
+});
+
+// DELETE /:id/collaborators/:userId — Remove a collaborator (owner only)
+router.delete('/:id/collaborators/:userId', async (req: AuthRequest, res: Response) => {
+  try {
+    const document = await Document.findOne({
+      _id: req.params.id,
+      owner: req.userId,
+    });
+
+    if (!document) {
+      return res.status(403).json({ message: 'Only the document owner can remove collaborators' });
+    }
+
+    const targetId = req.params.userId;
+    document.collaborators = document.collaborators.filter(
+      (c: any) => c.toString() !== targetId
+    );
+    await document.save();
+
+    const populated = await Document.findById(document._id)
+      .populate('owner', 'name email avatarColor')
+      .populate('collaborators', 'name email avatarColor');
+
+    res.json({
+      message: 'Collaborator removed successfully',
+      owner: populated?.owner,
+      collaborators: populated?.collaborators,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error removing collaborator' });
+  }
+});
+
 export default router;
 

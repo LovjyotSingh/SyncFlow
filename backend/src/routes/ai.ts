@@ -3,14 +3,8 @@ import { GoogleGenAI } from '@google/genai';
 
 const router = Router();
 
-// Primary and fallback models in order of priority
-const CANDIDATE_MODELS = [
-  process.env.GEMINI_MODEL,
-  'gemini-2.5-flash',
-  'gemini-1.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-pro',
-].filter(Boolean) as string[];
+// Model: Gemini 3.7 Flash exclusively
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.7-flash';
 
 const COMMANDS: Record<string, string> = {
   summarize: `You are an expert document analyst. Summarize the following document into 3-5 concise, insightful bullet points. 
@@ -44,7 +38,7 @@ function formatErrorMessage(error: any): string {
     return 'Invalid Gemini API key. Please check GEMINI_API_KEY in backend .env';
   }
   if (msg.includes('503') || msg.includes('high demand') || msg.includes('Service Unavailable')) {
-    return 'Google Gemini servers are currently experiencing high demand. Please try again in a few seconds.';
+    return 'Gemini 3.7 Flash is currently experiencing high demand. Please try again in a few seconds.';
   }
   if (msg.includes('quota') || msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
     return 'API rate limit or quota reached. Please try again in a moment.';
@@ -52,42 +46,7 @@ function formatErrorMessage(error: any): string {
   return msg || 'AI request failed';
 }
 
-async function executeWithModelFallback<T>(
-  ai: GoogleGenAI,
-  fn: (modelName: string) => Promise<T>
-): Promise<T> {
-  const uniqueModels = Array.from(new Set(CANDIDATE_MODELS));
-  let lastError: any = null;
-
-  for (const modelName of uniqueModels) {
-    try {
-      return await fn(modelName);
-    } catch (err: any) {
-      lastError = err;
-      const isRecoverable =
-        err.status === 503 ||
-        err.status === 404 ||
-        err.status === 429 ||
-        err.message?.includes('503') ||
-        err.message?.includes('high demand') ||
-        err.message?.includes('404') ||
-        err.message?.includes('not found') ||
-        err.message?.includes('429') ||
-        err.message?.includes('quota') ||
-        err.message?.includes('overloaded');
-
-      if (isRecoverable) {
-        console.warn(`⚠️ Model "${modelName}" unavailable (${err.message?.slice(0, 100)}). Trying next model...`);
-        continue;
-      }
-      throw err;
-    }
-  }
-
-  throw lastError;
-}
-
-// POST /api/ai — Standard (non-streaming) for simple use
+// POST /api/ai — Standard (non-streaming)
 router.post('/ai', async (req, res) => {
   try {
     const { command, content, prompt: customPrompt } = req.body;
@@ -109,26 +68,23 @@ router.post('/ai', async (req, res) => {
     }
 
     const ai = new GoogleGenAI({ apiKey: key });
-    const result = await executeWithModelFallback(ai, async (modelName) => {
-      const response = await ai.models.generateContent({
-        model: modelName,
-        contents: `${systemPrompt}\n\n---\n\n${content}`,
-        config: {
-          systemInstruction: 'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
-        },
-      });
-      return { text: response.text || '', model: modelName };
+    const response = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: `${systemPrompt}\n\n---\n\n${content}`,
+      config: {
+        systemInstruction: 'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
+      },
     });
 
-    res.json({ result: result.text, model: result.model });
+    res.json({ result: response.text || '', model: GEMINI_MODEL });
   } catch (error: any) {
     console.error('Gemini AI error:', error.message);
     res.status(500).json({ error: formatErrorMessage(error) });
   }
 });
 
-// POST /api/ai/stream — Streaming (Server-Sent Events) for real-time word-by-word output
-router.post('/ai/stream', async (req, res) => {
+// POST /api/ai/stream — Streaming (Server-Sent Events) for real-time output
+router.post('/api/ai/stream', async (req, res) => {
   try {
     const { command, content, prompt: customPrompt } = req.body;
 
@@ -157,14 +113,12 @@ router.post('/ai/stream', async (req, res) => {
     res.flushHeaders();
 
     const ai = new GoogleGenAI({ apiKey: key });
-    const streamResult = await executeWithModelFallback(ai, async (modelName) => {
-      return await ai.models.generateContentStream({
-        model: modelName,
-        contents: `${systemPrompt}\n\n---\n\n${content}`,
-        config: {
-          systemInstruction: 'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
-        },
-      });
+    const streamResult = await ai.models.generateContentStream({
+      model: GEMINI_MODEL,
+      contents: `${systemPrompt}\n\n---\n\n${content}`,
+      config: {
+        systemInstruction: 'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
+      },
     });
 
     for await (const chunk of streamResult) {
@@ -183,8 +137,8 @@ router.post('/ai/stream', async (req, res) => {
   }
 });
 
-// POST /api/ai/chat/stream — Free-form conversational AI (code, explanations, anything)
-router.post('/ai/chat/stream', async (req, res) => {
+// POST /api/ai/chat/stream — Free-form conversational AI with gemini-3.7-flash
+router.post('/api/ai/chat/stream', async (req, res) => {
   try {
     const { message, history = [] } = req.body;
 
@@ -212,21 +166,19 @@ router.post('/ai/chat/stream', async (req, res) => {
       'summarize topics, generate content, and help with anything the user asks. ' +
       'Be concise but thorough. Use markdown formatting (code blocks, headers, bullet points) where it improves clarity.';
 
-    // Build conversation history for multi-turn context
+    // Map conversation history
     const contents = (history as { role: string; text: string }[]).map((msg) => ({
       role: msg.role === 'user' ? 'user' : 'model',
       parts: [{ text: msg.text }],
     }));
     contents.push({ role: 'user', parts: [{ text: message }] });
 
-    const streamResult = await executeWithModelFallback(ai, async (modelName) => {
-      return await ai.models.generateContentStream({
-        model: modelName,
-        contents,
-        config: {
-          systemInstruction,
-        },
-      });
+    const streamResult = await ai.models.generateContentStream({
+      model: GEMINI_MODEL,
+      contents,
+      config: {
+        systemInstruction,
+      },
     });
 
     for await (const chunk of streamResult) {

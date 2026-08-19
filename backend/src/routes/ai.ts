@@ -3,14 +3,13 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const router = Router();
 
-// Primary and fallback models in order of priority
+// Primary and fallback models in order of priority (gemini-1.5-flash is stable and fast)
 const CANDIDATE_MODELS = [
   process.env.GEMINI_MODEL,
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
   'gemini-1.5-flash',
   'gemini-1.5-flash-8b',
   'gemini-1.5-pro',
+  'gemini-2.0-flash',
 ].filter(Boolean) as string[];
 
 const COMMANDS: Record<string, string> = {

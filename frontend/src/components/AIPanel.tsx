@@ -36,7 +36,6 @@ interface AIPanelProps {
 
 export default function AIPanel({ getEditorContent, isOpen, onClose, onInsertContent }: AIPanelProps) {
   const [tab, setTab] = useState<"commands" | "chat">("commands");
-  const [apiKey, setApiKey] = useState("");
 
   // Commands tab state
   const [result, setResult] = useState("");
@@ -122,7 +121,7 @@ export default function AIPanel({ getEditorContent, isOpen, onClose, onInsertCon
     try {
       await streamSSE(
         "/api/ai/stream",
-        { command: commandId, content, apiKey },
+        { command: commandId, content },
         (text) => setResult((p) => p + text),
         () => setStreaming(false),
         (msg) => { setCmdError(msg); setStreaming(false); },
@@ -173,7 +172,7 @@ export default function AIPanel({ getEditorContent, isOpen, onClose, onInsertCon
     try {
       await streamSSE(
         "/api/ai/chat/stream",
-        { message: msg, history: historyForApi.slice(0, -1), apiKey },
+        { message: msg, history: historyForApi.slice(0, -1) },
         (text) => {
           setChatHistory((h) => {
             const updated = [...h];
@@ -242,7 +241,7 @@ export default function AIPanel({ getEditorContent, isOpen, onClose, onInsertCon
             fontSize: "9px", padding: "2px 6px", borderRadius: "4px",
             background: "rgba(99,102,241,0.2)", color: "rgba(99,102,241,0.9)",
             border: "1px solid rgba(99,102,241,0.3)", fontWeight: "700", letterSpacing: "0.3px",
-          }}>GEMINI 3.7 FLASH</span>
+          }}>GEMINI 1.5 FLASH</span>
         </div>
         <button onClick={onClose} style={{
           background: "none", border: "none", cursor: "pointer",
@@ -279,22 +278,6 @@ export default function AIPanel({ getEditorContent, isOpen, onClose, onInsertCon
             {label}
           </button>
         ))}
-      </div>
-
-      {/* API Key (shared across tabs) */}
-      <div style={{ padding: "12px 16px 0" }}>
-        <input
-          type="password"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          placeholder="Gemini API key (optional if set in .env)"
-          style={{
-            width: "100%", background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.08)", borderRadius: "7px",
-            padding: "7px 11px", color: "rgba(255,255,255,0.6)",
-            fontSize: "11px", outline: "none", boxSizing: "border-box",
-          }}
-        />
       </div>
 
       {/* ── COMMANDS TAB ── */}

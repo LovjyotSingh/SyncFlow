@@ -226,6 +226,10 @@ export default function SharedDocPage() {
                         documentId={docId}
                         onPresenceChange={handlePresenceChange}
                         onConnectionChange={handleConnectionChange}
+                        onKicked={(msg) => {
+                          alert(msg || "You have been removed from this workspace by the owner.");
+                          router.push("/");
+                        }}
                       />
                     )}
                   </div>

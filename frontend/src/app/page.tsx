@@ -55,6 +55,7 @@ export default function Home() {
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [joinModalOpen, setJoinModalOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [presenceMenuOpen, setPresenceMenuOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -267,7 +268,13 @@ export default function Home() {
 
   const handleRemoveCollaborator = async (userId: string, userName: string) => {
     if (!activeDocId) return;
-    if (!confirm(`Remove ${userName} from this workspace?`)) return;
+    if (!confirm(`Kick ${userName} from this workspace?`)) return;
+
+    // 1. Fire instant real-time socket kick to kick them off the screen immediately
+    editorRef.current?.kickUser({ targetUserId: userId, targetName: userName });
+
+    // 2. Remove locally from presence
+    setPresence((prev) => prev.filter((p) => p.userId !== userId && p.name !== userName));
 
     const token = getToken();
     if (!token) return;
@@ -283,7 +290,7 @@ export default function Home() {
           ...prev,
           collaborators: prev.collaborators?.filter((c) => c._id !== userId) || [],
         }));
-        setToastMessage(`Removed ${userName} from workspace`);
+        setToastMessage(`Kicked ${userName} from workspace`);
         setTimeout(() => setToastMessage(null), 3000);
       } else {
         const text = await res.text();
@@ -292,6 +299,41 @@ export default function Home() {
       }
     } catch {
       alert("Network error removing collaborator");
+    }
+  };
+
+  const handleKickPresenceUser = async (user: Presence) => {
+    if (!activeDocId) return;
+    if (user.userId === currentUser?.id || user.name === currentUser?.name) return;
+    if (!confirm(`Kick ${user.name} from this workspace right now?`)) return;
+
+    // 1. Kick via real-time socket
+    editorRef.current?.kickUser({
+      targetSocketId: user.socketId,
+      targetUserId: user.userId,
+      targetName: user.name,
+    });
+
+    // 2. Remove from presence locally
+    setPresence((prev) => prev.filter((p) => (user.socketId ? p.socketId !== user.socketId : p.name !== user.name)));
+    setToastMessage(`Kicked ${user.name} from workspace`);
+    setTimeout(() => setToastMessage(null), 3000);
+
+    // 3. If registered user, delete from DB
+    if (user.userId) {
+      const token = getToken();
+      if (token) {
+        try {
+          await fetch(`${BACKEND_URL}/api/documents/${activeDocId}/collaborators/${user.userId}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          setCollaboratorsList((prev) => ({
+            ...prev,
+            collaborators: prev.collaborators?.filter((c) => c._id !== user.userId) || [],
+          }));
+        } catch {}
+      }
     }
   };
 
@@ -781,24 +823,85 @@ export default function Home() {
               </span>
             </div>
 
-            {/* Live presence avatars */}
+            {/* Live presence avatars with interactive quick-kick dropdown */}
             {presence.length > 0 && (
-              <div style={{ display: "flex", alignItems: "center" }}>
-                {presence.slice(0, 4).map((user, i) => (
-                  <div key={i} title={user.name} style={{
-                    width: "28px", height: "28px", borderRadius: "50%",
-                    background: user.color, border: "2px solid #080810",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: "10px", fontWeight: "700", color: "white",
-                    marginLeft: i > 0 ? "-8px" : "0",
-                    boxShadow: `0 0 10px ${user.color}66`,
-                    cursor: "pointer", zIndex: presence.length - i, position: "relative",
-                    outline: user.isTyping ? `2px solid ${user.color}` : "none",
-                    outlineOffset: "1px",
+              <div style={{ position: "relative" }}>
+                <div
+                  onClick={() => setPresenceMenuOpen(!presenceMenuOpen)}
+                  style={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+                  title="Click to view online users and kick/manage collaborators"
+                >
+                  {presence.slice(0, 4).map((user, i) => (
+                    <div key={i} title={user.name} style={{
+                      width: "28px", height: "28px", borderRadius: "50%",
+                      background: user.color, border: "2px solid #080810",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: "10px", fontWeight: "700", color: "white",
+                      marginLeft: i > 0 ? "-8px" : "0",
+                      boxShadow: `0 0 10px ${user.color}66`,
+                      zIndex: presence.length - i, position: "relative",
+                      outline: user.isTyping ? `2px solid ${user.color}` : "none",
+                      outlineOffset: "1px",
+                    }}>
+                      {user.name.slice(0, 2).toUpperCase()}
+                    </div>
+                  ))}
+                </div>
+
+                {presenceMenuOpen && (
+                  <div style={{
+                    position: "absolute", right: 0, top: "36px", width: "260px",
+                    background: "rgba(20,20,35,0.98)", border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: "12px", padding: "10px", zIndex: 100,
+                    boxShadow: "0 16px 40px rgba(0,0,0,0.6)", backdropFilter: "blur(20px)",
                   }}>
-                    {user.name.slice(0, 2).toUpperCase()}
+                    <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", fontWeight: "600", textTransform: "uppercase", marginBottom: "8px" }}>
+                      Active in Room ({presence.length})
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "180px", overflowY: "auto" }}>
+                      {presence.map((user, idx) => {
+                        const isSelf = user.userId === currentUser?.id || user.name === currentUser?.name;
+                        return (
+                          <div key={idx} style={{
+                            display: "flex", alignItems: "center", justifyContent: "space-between",
+                            padding: "6px 8px", borderRadius: "8px", background: "rgba(255,255,255,0.03)",
+                          }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <div style={{
+                                width: "22px", height: "22px", borderRadius: "50%",
+                                background: user.color, display: "flex", alignItems: "center",
+                                justifyContent: "center", fontSize: "10px", fontWeight: "700", color: "white",
+                              }}>
+                                {user.name.slice(0, 2).toUpperCase()}
+                              </div>
+                              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.9)", fontWeight: "500" }}>
+                                {user.name} {isSelf && <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)" }}>(You)</span>}
+                              </div>
+                            </div>
+                            {isOwner && !isSelf && (
+                              <button
+                                onClick={() => handleKickPresenceUser(user)}
+                                title={`Kick ${user.name} from workspace`}
+                                style={{
+                                  display: "flex", alignItems: "center", gap: "4px",
+                                  padding: "3px 8px", borderRadius: "6px",
+                                  background: "rgba(244,63,94,0.15)", border: "1px solid rgba(244,63,94,0.3)",
+                                  color: "#fca5a5", fontSize: "10px", fontWeight: "600",
+                                  cursor: "pointer", transition: "all 0.15s ease",
+                                }}
+                                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(244,63,94,0.3)"; }}
+                                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(244,63,94,0.15)"; }}
+                              >
+                                <LucideUserMinus style={{ width: "10px", height: "10px", color: "#f43f5e" }} />
+                                <span>Kick</span>
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                ))}
+                )}
               </div>
             )}
 
@@ -1100,6 +1203,26 @@ export default function Home() {
                         onPresenceChange={setPresence}
                         onConnectionChange={setIsConnected}
                         onChangeContent={setEditorText}
+                        onKicked={(msg) => {
+                          alert(msg || "You have been removed from this workspace by the owner.");
+                          const token = getToken();
+                          if (token) {
+                            fetch(`${BACKEND_URL}/api/documents/user/me`, {
+                              headers: { Authorization: `Bearer ${token}` },
+                            })
+                              .then((r) => (r.ok ? r.json() : []))
+                              .then((docs) => {
+                                if (Array.isArray(docs) && docs.length > 0) {
+                                  setDocuments(docs);
+                                  setActiveDocId(docs[0]._id);
+                                  setDocTitle(docs[0].title);
+                                } else {
+                                  createNewDocument();
+                                }
+                              })
+                              .catch(() => createNewDocument());
+                          }
+                        }}
                       />
                     ) : (
                       <div style={{ color: "rgba(255,255,255,0.3)", textAlign: "center", padding: "40px 0" }}>

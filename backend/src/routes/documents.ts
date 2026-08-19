@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { Document } from '../models/Document';
 import { requireAuth, AuthRequest } from './auth';
+import { kickUserFromDocument, kickAllFromDocument } from '../socket/index';
 
 const router = Router();
 
@@ -241,6 +242,11 @@ router.delete('/:id/collaborators/:userId', async (req: AuthRequest, res: Respon
     );
     await document.save();
 
+    // Trigger real-time socket kick to immediately disconnect client & update presence
+    try {
+      kickUserFromDocument(document._id.toString(), targetId);
+    } catch {}
+
     const populated = await Document.findById(document._id)
       .populate('owner', 'name email avatarColor')
       .populate('collaborators', 'name email avatarColor');
@@ -296,6 +302,11 @@ router.post('/:id/kick-all', async (req: AuthRequest, res: Response) => {
     document.collaborators = [];
     document.shareToken = randomUUID();
     await document.save();
+
+    // Trigger real-time socket kick for all non-owner collaborators
+    try {
+      kickAllFromDocument(document._id.toString(), req.userId!);
+    } catch {}
 
     res.json({
       message: 'All collaborators have been kicked and workspace made private',

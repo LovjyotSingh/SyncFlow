@@ -10,12 +10,13 @@ import "@blocknote/mantine/style.css";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
-export type Presence = { name: string; color: string; isTyping?: boolean };
+export type Presence = { socketId?: string; userId?: string; name: string; color: string; isTyping?: boolean };
 
 export interface EditorHandle {
   getText: () => string;
   insertContent: (text: string) => void;
   clearContent: () => void;
+  kickUser: (target: { targetSocketId?: string; targetUserId?: string; targetName?: string }) => void;
 }
 
 interface EditorProps {
@@ -23,10 +24,11 @@ interface EditorProps {
   onPresenceChange?: (users: Presence[]) => void;
   onConnectionChange?: (connected: boolean) => void;
   onChangeContent?: (text: string) => void;
+  onKicked?: (message?: string) => void;
 }
 
 const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
-  { documentId, onPresenceChange, onConnectionChange, onChangeContent },
+  { documentId, onPresenceChange, onConnectionChange, onChangeContent, onKicked },
   ref
 ) {
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -40,11 +42,13 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
   const onPresenceChangeRef = useRef(onPresenceChange);
   const onConnectionChangeRef = useRef(onConnectionChange);
   const onChangeContentRef = useRef(onChangeContent);
+  const onKickedRef = useRef(onKicked);
 
   useEffect(() => {
     onPresenceChangeRef.current = onPresenceChange;
     onConnectionChangeRef.current = onConnectionChange;
     onChangeContentRef.current = onChangeContent;
+    onKickedRef.current = onKicked;
   });
 
   const editor = useCreateBlockNote();
@@ -55,7 +59,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
     if (user) userName.current = user.name;
   }, []);
 
-  // Expose helper methods to parent (for AIPanel & More Options)
+  // Expose helper methods to parent (for AIPanel & More Options & Kicking)
   useImperativeHandle(ref, () => ({
     getText: () => {
       try {
@@ -105,6 +109,11 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
         socket.emit("send-changes", documentId, editor.document);
       }
     },
+    kickUser: (target: { targetSocketId?: string; targetUserId?: string; targetName?: string }) => {
+      if (socket && isConnected) {
+        socket.emit("kick-user", { documentId, ...target });
+      }
+    },
   }));
 
   // Stable Socket.io connection that only resets when documentId changes
@@ -122,8 +131,13 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
     s.on("connect", () => {
       setIsConnected(true);
       onConnectionChangeRef.current?.(true);
-      // Join document with isolated document ID room
-      s.emit("join-document", documentId, userName.current);
+      const user = getUser();
+      // Join document with isolated document ID room and full user profile
+      s.emit("join-document", documentId, {
+        name: user?.name || userName.current || "Guest",
+        userId: user?.id,
+        color: user?.avatarColor,
+      });
     });
 
     s.on("disconnect", (reason) => {
@@ -161,6 +175,17 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
       onPresenceChangeRef.current?.(users);
     });
 
+    // Handle being kicked by owner
+    s.on("kicked", (data: any) => {
+      const msg = data?.message || "You have been removed from this workspace by the owner.";
+      if (onKickedRef.current) {
+        onKickedRef.current(msg);
+      } else {
+        alert(msg);
+        window.location.href = "/";
+      }
+    });
+
     setSocket(s);
 
     return () => {
@@ -170,6 +195,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
       s.off("load-document");
       s.off("receive-changes");
       s.off("presence-update");
+      s.off("kicked");
       s.disconnect();
     };
   }, [documentId]);

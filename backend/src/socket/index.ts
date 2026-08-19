@@ -34,15 +34,14 @@ function broadcastPresence(io: Server, documentId: string) {
 function markKicked(documentId: string, identifier?: string) {
   if (!identifier) return;
   if (!kickedMap[documentId]) kickedMap[documentId] = new Set();
-  kickedMap[documentId].add(identifier.toLowerCase());
+  kickedMap[documentId].add(identifier.toString().toLowerCase());
 }
 
-function isKicked(documentId: string, socketId?: string, userId?: string, name?: string): boolean {
+function isKicked(documentId: string, socketId?: string, userId?: string): boolean {
   const set = kickedMap[documentId];
   if (!set) return false;
   if (socketId && set.has(socketId.toLowerCase())) return true;
   if (userId && set.has(userId.toLowerCase())) return true;
-  if (name && set.has(name.toLowerCase())) return true;
   return false;
 }
 
@@ -56,7 +55,6 @@ export const kickUserFromDocument = (documentId: string, targetUserId: string) =
     if (user.userId === targetUserId || user.socketId === targetUserId) {
       socketsToKick.push(sockId);
       markKicked(documentId, sockId);
-      markKicked(documentId, user.name);
     }
   }
 
@@ -83,7 +81,6 @@ export const kickAllFromDocument = (documentId: string, ownerUserId: string) => 
       socketsToKick.push(sockId);
       markKicked(documentId, sockId);
       if (user.userId) markKicked(documentId, user.userId);
-      markKicked(documentId, user.name);
     }
   }
 
@@ -125,8 +122,8 @@ export const setupSocket = (io: Server, redisClient: any) => {
       }
 
       // Check if user was previously kicked from this document
-      if (isKicked(documentId, socket.id, userId, name)) {
-        console.warn(`🛑 Rejected rejoin attempt for kicked user ${name} (${socket.id}) on doc ${documentId}`);
+      if (isKicked(documentId, socket.id, userId)) {
+        console.warn(`🛑 Rejected rejoin attempt for kicked user ${userId || socket.id} on doc ${documentId}`);
         socket.emit('kicked', {
           documentId,
           message: 'You were removed from this workspace by the owner and cannot rejoin.',
@@ -164,7 +161,7 @@ export const setupSocket = (io: Server, redisClient: any) => {
     });
 
     // Handle kick-user event from client
-    socket.on('kick-user', ({ documentId, targetSocketId, targetUserId, targetName }: {
+    socket.on('kick-user', ({ documentId, targetSocketId, targetUserId }: {
       documentId: string;
       targetSocketId?: string;
       targetUserId?: string;
@@ -172,24 +169,20 @@ export const setupSocket = (io: Server, redisClient: any) => {
     }) => {
       if (!presenceMap[documentId]) return;
 
-      console.log(`👢 Kick event received for ${targetName || targetUserId || targetSocketId} in doc ${documentId}`);
+      console.log(`👢 Kick event received for ${targetUserId || targetSocketId} in doc ${documentId}`);
 
-      // Register in kicked blocklist
-      markKicked(documentId, targetSocketId);
-      markKicked(documentId, targetUserId);
-      markKicked(documentId, targetName);
+      if (targetSocketId) markKicked(documentId, targetSocketId);
+      if (targetUserId) markKicked(documentId, targetUserId);
 
       const socketsToKick: string[] = [];
       for (const [sockId, user] of Object.entries(presenceMap[documentId])) {
         if (
           (targetSocketId && sockId === targetSocketId) ||
-          (targetUserId && user.userId === targetUserId) ||
-          (targetName && user.name.toLowerCase() === targetName.toLowerCase())
+          (targetUserId && user.userId === targetUserId)
         ) {
           socketsToKick.push(sockId);
           markKicked(documentId, sockId);
           if (user.userId) markKicked(documentId, user.userId);
-          markKicked(documentId, user.name);
         }
       }
 
@@ -209,18 +202,24 @@ export const setupSocket = (io: Server, redisClient: any) => {
       broadcastPresence(io, documentId);
     });
 
-    // Handle document changes with strict membership verification
+    // Handle document changes
     socket.on('send-changes', async (documentId: string, content: any) => {
-      // Security check: Only broadcast if the sender is currently a verified member of this room
-      if (!presenceMap[documentId]?.[socket.id]) {
-        console.warn(`🛑 Blocked unauthorized edits from socket ${socket.id} on doc ${documentId}`);
+      const user = presenceMap[documentId]?.[socket.id];
+      // Only block if explicitly kicked
+      if (isKicked(documentId, socket.id, user?.userId)) {
+        console.warn(`🛑 Blocked edits from kicked user on doc ${documentId}`);
         socket.emit('kicked', {
           documentId,
-          message: 'You do not have permission to edit this document.',
+          message: 'You have been removed from this workspace by the owner.',
         });
         socket.leave(documentId);
         socket.disconnect(true);
         return;
+      }
+
+      // Ensure socket is joined in the room
+      if (!socket.rooms.has(documentId)) {
+        socket.join(documentId);
       }
 
       // Broadcast to everyone else in the room

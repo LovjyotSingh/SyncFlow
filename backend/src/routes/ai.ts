@@ -3,8 +3,14 @@ import { GoogleGenAI } from '@google/genai';
 
 const router = Router();
 
-// Model: Gemini 3.7 Flash exclusively
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.7-flash';
+// Primary is gemini-3.7-flash, with automatic fallback during high demand spikes
+const CANDIDATE_MODELS = [
+  process.env.GEMINI_MODEL,
+  'gemini-3.7-flash',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+].filter(Boolean) as string[];
 
 const COMMANDS: Record<string, string> = {
   summarize: `You are an expert document analyst. Summarize the following document into 3-5 concise, insightful bullet points. 
@@ -38,12 +44,62 @@ function formatErrorMessage(error: any): string {
     return 'Invalid Gemini API key. Please check GEMINI_API_KEY in backend .env';
   }
   if (msg.includes('503') || msg.includes('high demand') || msg.includes('Service Unavailable')) {
-    return 'Gemini 3.7 Flash is currently experiencing high demand. Please try again in a few seconds.';
+    return 'Google Gemini servers are currently experiencing global high demand. Please retry in a few seconds.';
   }
   if (msg.includes('quota') || msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
-    return 'API rate limit or quota reached. Please try again in a moment.';
+    return 'API rate limit reached. Please wait a moment before trying again.';
   }
   return msg || 'AI request failed';
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function executeWithRetryAndFallback<T>(
+  ai: GoogleGenAI,
+  fn: (modelName: string) => Promise<T>
+): Promise<{ result: T; modelName: string }> {
+  const models = Array.from(new Set(CANDIDATE_MODELS));
+  let lastError: any = null;
+
+  for (const modelName of models) {
+    const maxAttempts = modelName === 'gemini-3.7-flash' ? 2 : 1;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        if (attempt > 0) {
+          console.log(`[AI] Retrying "${modelName}" after backoff...`);
+          await sleep(1000 * attempt);
+        }
+        const result = await fn(modelName);
+        return { result, modelName };
+      } catch (err: any) {
+        lastError = err;
+        const msg = (err.message || '').toLowerCase();
+        const status = err.status || err.statusCode;
+        const isCapacityError =
+          status === 503 ||
+          status === 429 ||
+          status === 404 ||
+          msg.includes('503') ||
+          msg.includes('429') ||
+          msg.includes('404') ||
+          msg.includes('high demand') ||
+          msg.includes('service unavailable') ||
+          msg.includes('quota') ||
+          msg.includes('resource exhausted') ||
+          msg.includes('overloaded');
+
+        if (isCapacityError) {
+          console.warn(`⚠️ Model "${modelName}" capacity error (${err.message?.slice(0, 80)}). Trying fallback...`);
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
+
+  throw lastError;
 }
 
 // GET health check for AI routes
@@ -51,7 +107,8 @@ router.get(['/ai', '/ai/health', '/health'], (req, res) => {
   res.json({
     status: 'ok',
     service: 'SyncFlow AI Service',
-    model: GEMINI_MODEL,
+    primaryModel: 'gemini-3.7-flash',
+    fallbackModels: CANDIDATE_MODELS.slice(1),
     keyConfigured: !!process.env.GEMINI_API_KEY,
   });
 });
@@ -78,15 +135,18 @@ router.post(['/ai', '/'], async (req, res) => {
     }
 
     const ai = new GoogleGenAI({ apiKey: key });
-    const response = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: `${systemPrompt}\n\n---\n\n${content}`,
-      config: {
-        systemInstruction: 'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
-      },
+    const { result, modelName } = await executeWithRetryAndFallback(ai, async (model) => {
+      const response = await ai.models.generateContent({
+        model,
+        contents: `${systemPrompt}\n\n---\n\n${content}`,
+        config: {
+          systemInstruction: 'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
+        },
+      });
+      return response.text || '';
     });
 
-    res.json({ result: response.text || '', model: GEMINI_MODEL });
+    res.json({ result, model: modelName });
   } catch (error: any) {
     console.error('Gemini AI error:', error.message);
     res.status(500).json({ error: formatErrorMessage(error) });
@@ -123,12 +183,14 @@ router.post(['/ai/stream', '/stream'], async (req, res) => {
     res.flushHeaders();
 
     const ai = new GoogleGenAI({ apiKey: key });
-    const streamResult = await ai.models.generateContentStream({
-      model: GEMINI_MODEL,
-      contents: `${systemPrompt}\n\n---\n\n${content}`,
-      config: {
-        systemInstruction: 'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
-      },
+    const { result: streamResult } = await executeWithRetryAndFallback(ai, async (model) => {
+      return await ai.models.generateContentStream({
+        model,
+        contents: `${systemPrompt}\n\n---\n\n${content}`,
+        config: {
+          systemInstruction: 'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
+        },
+      });
     });
 
     for await (const chunk of streamResult) {
@@ -183,12 +245,14 @@ router.post(['/ai/chat/stream', '/chat/stream'], async (req, res) => {
     }));
     contents.push({ role: 'user', parts: [{ text: message }] });
 
-    const streamResult = await ai.models.generateContentStream({
-      model: GEMINI_MODEL,
-      contents,
-      config: {
-        systemInstruction,
-      },
+    const { result: streamResult } = await executeWithRetryAndFallback(ai, async (model) => {
+      return await ai.models.generateContentStream({
+        model,
+        contents,
+        config: {
+          systemInstruction,
+        },
+      });
     });
 
     for await (const chunk of streamResult) {

@@ -1118,46 +1118,59 @@ export default function Home() {
         <header style={{
           display: zenMode ? "none" : "flex",
           alignItems: "center", justifyContent: "space-between",
-          padding: "0 28px", height: "56px", minHeight: "56px",
-          background: "rgba(8,8,16,0.7)", borderBottom: "1px solid rgba(255,255,255,0.07)",
+          padding: "0 20px", height: "54px", minHeight: "54px",
+          background: "rgba(8,8,16,0.75)", borderBottom: "1px solid rgba(255,255,255,0.07)",
           backdropFilter: "blur(20px)", position: "sticky", top: 0, zIndex: 30,
+          gap: "12px", overflow: "hidden",
         }}>
-          {/* Breadcrumb */}
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.3)" }}>Workspace</span>
-            <LucideChevronRight style={{ width: "13px", height: "13px", color: "rgba(255,255,255,0.15)" }} />
-            <span style={{
-              fontSize: "13px", color: "rgba(255,255,255,0.85)", fontWeight: "500",
-              background: "rgba(255,255,255,0.07)", padding: "3px 8px",
-              borderRadius: "6px", border: "1px solid rgba(255,255,255,0.08)",
-            }}>{docTitle}</span>
-          </div>
-
-          {/* Right actions */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-              <LucideClock style={{ width: "12px", height: "12px", color: "rgba(255,255,255,0.2)" }} />
-              <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.25)" }}>
-                {savingTitle ? "Saving title..." : lastSaved}
-              </span>
+          {/* Left: Breadcrumb & Save Status */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, flexShrink: 1 }}>
+            <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)", fontWeight: "500" }}>Workspace</span>
+            <LucideChevronRight style={{ width: "12px", height: "12px", color: "rgba(255,255,255,0.15)", flexShrink: 0 }} />
+            <div style={{
+              fontSize: "13px", color: "rgba(255,255,255,0.9)", fontWeight: "600",
+              background: "rgba(255,255,255,0.06)", padding: "3px 10px",
+              borderRadius: "7px", border: "1px solid rgba(255,255,255,0.08)",
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              maxWidth: "220px",
+            }}>
+              {docTitle || "Untitled"}
             </div>
 
-            {/* Live presence avatars with interactive quick-kick dropdown */}
+            {/* Sync status indicator */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: "4px",
+              padding: "2px 6px", borderRadius: "6px",
+              background: "rgba(255,255,255,0.03)", fontSize: "11px", color: "rgba(255,255,255,0.3)",
+              flexShrink: 0,
+            }} title={savingTitle ? "Saving changes to server..." : `Last saved ${lastSaved}`}>
+              <div style={{
+                width: "5px", height: "5px", borderRadius: "50%",
+                background: isConnected ? "#10b981" : "#f59e0b",
+                boxShadow: isConnected ? "0 0 6px rgba(16,185,129,0.8)" : "none",
+              }} />
+              <span>{savingTitle ? "Saving..." : "Saved"}</span>
+            </div>
+          </div>
+
+          {/* Right: Actions */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+            {/* Live presence avatar stack */}
             {presence.length > 0 && (
               <div style={{ position: "relative" }}>
                 <div
                   onClick={() => setPresenceMenuOpen(!presenceMenuOpen)}
                   style={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-                  title="Click to view online users and kick/manage collaborators"
+                  title="Click to view online users and manage collaborators"
                 >
-                  {presence.slice(0, 4).map((user, i) => (
+                  {presence.slice(0, 3).map((user, i) => (
                     <div key={i} title={user.name} style={{
-                      width: "28px", height: "28px", borderRadius: "50%",
+                      width: "26px", height: "26px", borderRadius: "50%",
                       background: user.color, border: "2px solid #080810",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: "10px", fontWeight: "700", color: "white",
-                      marginLeft: i > 0 ? "-8px" : "0",
-                      boxShadow: `0 0 10px ${user.color}66`,
+                      fontSize: "9px", fontWeight: "700", color: "white",
+                      marginLeft: i > 0 ? "-7px" : "0",
+                      boxShadow: `0 0 8px ${user.color}66`,
                       zIndex: presence.length - i, position: "relative",
                       outline: user.isTyping ? `2px solid ${user.color}` : "none",
                       outlineOffset: "1px",
@@ -1165,11 +1178,22 @@ export default function Home() {
                       {user.name.slice(0, 2).toUpperCase()}
                     </div>
                   ))}
+                  {presence.length > 3 && (
+                    <div style={{
+                      width: "22px", height: "22px", borderRadius: "50%",
+                      background: "rgba(255,255,255,0.12)", border: "2px solid #080810",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: "9px", fontWeight: "700", color: "rgba(255,255,255,0.8)",
+                      marginLeft: "-6px", zIndex: 0, position: "relative",
+                    }}>
+                      +{presence.length - 3}
+                    </div>
+                  )}
                 </div>
 
                 {presenceMenuOpen && (
                   <div style={{
-                    position: "absolute", right: 0, top: "36px", width: "260px",
+                    position: "absolute", right: 0, top: "34px", width: "250px",
                     background: "rgba(20,20,35,0.98)", border: "1px solid rgba(255,255,255,0.1)",
                     borderRadius: "12px", padding: "10px", zIndex: 100,
                     boxShadow: "0 16px 40px rgba(0,0,0,0.6)", backdropFilter: "blur(20px)",
@@ -1224,115 +1248,60 @@ export default function Home() {
               </div>
             )}
 
-            {/* Exit Collaboration Button (for Collaborators) */}
-            {isCollaborator && (
-              <button
-                onClick={() => handleLeaveDocument()}
-                title="Exit collaboration and leave this workspace"
-                style={{
-                  display: "flex", alignItems: "center", gap: "6px", padding: "7px 13px", borderRadius: "8px",
-                  background: "rgba(244,63,94,0.12)", border: "1px solid rgba(244,63,94,0.3)",
-                  color: "#fca5a5", fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none",
-                  transition: "all 0.15s ease",
-                }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(244,63,94,0.22)"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(244,63,94,0.12)"; }}
-              >
-                <LucideLogOut style={{ width: "13px", height: "13px", color: "#f43f5e" }} />
-                <span>Exit Collaboration</span>
-              </button>
-            )}
-
-            {/* End Collaboration Button (for Admin / Owner) */}
-            {isOwner && (
-              <button
-                onClick={handleAdminExitCollab}
-                title="End collaboration: Kick all collaborators and make this workspace private"
-                style={{
-                  display: "flex", alignItems: "center", gap: "6px", padding: "7px 13px", borderRadius: "8px",
-                  background: "rgba(244,63,94,0.12)", border: "1px solid rgba(244,63,94,0.3)",
-                  color: "#fca5a5", fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none",
-                  transition: "all 0.15s ease",
-                }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(244,63,94,0.22)"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(244,63,94,0.12)"; }}
-              >
-                <LucideUserX style={{ width: "13px", height: "13px", color: "#f43f5e" }} />
-                <span>End Collaboration</span>
-              </button>
-            )}
-
-            {/* AI Assistant Button */}
+            {/* AI Assistant Pill */}
             <button
               onClick={() => setAiPanelOpen(!aiPanelOpen)}
               style={{
-                display: "flex", alignItems: "center", gap: "6px",
-                padding: "7px 14px", borderRadius: "8px",
-                background: aiPanelOpen ? "rgba(99,102,241,0.25)" : "rgba(255,255,255,0.07)",
-                border: aiPanelOpen ? "1px solid rgba(99,102,241,0.4)" : "1px solid rgba(255,255,255,0.1)",
-                color: aiPanelOpen ? "rgba(139,92,246,0.95)" : "rgba(255,255,255,0.75)",
-                fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none",
-                boxShadow: aiPanelOpen ? "0 0 12px rgba(99,102,241,0.25)" : "none",
+                display: "flex", alignItems: "center", gap: "5px",
+                padding: "6px 12px", borderRadius: "8px",
+                background: aiPanelOpen ? "rgba(99,102,241,0.22)" : "rgba(255,255,255,0.06)",
+                border: aiPanelOpen ? "1px solid rgba(99,102,241,0.45)" : "1px solid rgba(255,255,255,0.09)",
+                color: aiPanelOpen ? "#c7d2fe" : "rgba(255,255,255,0.8)",
+                fontSize: "12px", fontWeight: "600", cursor: "pointer", outline: "none",
+                boxShadow: aiPanelOpen ? "0 0 12px rgba(99,102,241,0.3)" : "none",
                 transition: "all 0.15s ease",
               }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.18)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = aiPanelOpen ? "rgba(99,102,241,0.22)" : "rgba(255,255,255,0.06)"; }}
             >
-              <LucideSparkles style={{ width: "13px", height: "13px" }} />
-              Gemini AI
+              <LucideSparkles style={{ width: "13px", height: "13px", color: "#a5b4fc" }} />
+              <span>AI</span>
             </button>
 
-            {/* Join Shared Workspace Button */}
-            <button
-              onClick={() => setJoinModalOpen(true)}
-              title="Join shared document via link or invite code"
-              style={{
-                display: "flex", alignItems: "center", gap: "6px", padding: "7px 13px", borderRadius: "8px",
-                background: "rgba(255,255,255,0.07)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                color: "rgba(255,255,255,0.8)",
-                fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none",
-                transition: "all 0.15s ease",
-              }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.12)"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.07)"; }}
-            >
-              <LucideUserPlus style={{ width: "13px", height: "13px", color: "#a5b4fc" }} />
-              Join Workspace
-            </button>
-
-            {/* Open / Import Dropdown */}
+            {/* Unified Files & Export Dropdown */}
             <div style={{ position: "relative" }}>
               <button
-                onClick={() => { setOpenMenuOpen(!openMenuOpen); setDownloadMenuOpen(false); setMoreMenuOpen(false); }}
+                onClick={() => { setOpenMenuOpen(!openMenuOpen); setMoreMenuOpen(false); }}
                 style={{
-                  display: "flex", alignItems: "center", gap: "5px", padding: "7px 12px", borderRadius: "8px",
-                  background: openMenuOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.07)",
-                  border: openMenuOpen ? "1px solid rgba(99,102,241,0.4)" : "1px solid rgba(255,255,255,0.1)",
-                  color: "rgba(255,255,255,0.85)", fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none",
+                  display: "flex", alignItems: "center", gap: "5px", padding: "6px 11px", borderRadius: "8px",
+                  background: openMenuOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.06)",
+                  border: openMenuOpen ? "1px solid rgba(99,102,241,0.4)" : "1px solid rgba(255,255,255,0.09)",
+                  color: "rgba(255,255,255,0.85)", fontSize: "12px", fontWeight: "500", cursor: "pointer", outline: "none",
                   transition: "all 0.15s ease",
                 }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.12)"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = openMenuOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.07)"; }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.1)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = openMenuOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.06)"; }}
               >
                 <LucideFolder style={{ width: "13px", height: "13px", color: "#38bdf8" }} />
-                <span>Open</span>
-                <LucideChevronDown style={{ width: "12px", height: "12px", opacity: 0.6 }} />
+                <span>Files</span>
+                <LucideChevronDown style={{ width: "11px", height: "11px", opacity: 0.6 }} />
               </button>
 
               {openMenuOpen && (
                 <div style={{
-                  position: "absolute", left: 0, top: "40px", width: "210px",
+                  position: "absolute", right: 0, top: "36px", width: "230px",
                   background: "rgba(20,20,35,0.98)", border: "1px solid rgba(255,255,255,0.1)",
                   borderRadius: "12px", padding: "6px", zIndex: 100,
                   boxShadow: "0 16px 40px rgba(0,0,0,0.6)", backdropFilter: "blur(20px)",
                 }}>
-                  <div style={{ padding: "6px 10px", fontSize: "10px", color: "rgba(255,255,255,0.3)", fontWeight: "600", textTransform: "uppercase" }}>
-                    Import to Workspace
+                  <div style={{ padding: "4px 8px", fontSize: "10px", color: "rgba(255,255,255,0.35)", fontWeight: "700", textTransform: "uppercase" }}>
+                    Open & Import
                   </div>
                   <button
                     onClick={() => { fileInputRef.current?.click(); setOpenMenuOpen(false); }}
                     style={{
                       width: "100%", display: "flex", alignItems: "center", gap: "8px",
-                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      padding: "7px 8px", borderRadius: "6px", border: "none",
                       background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
                       cursor: "pointer", textAlign: "left",
                     }}
@@ -1340,17 +1309,14 @@ export default function Home() {
                     onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                   >
                     <LucideUpload style={{ width: "13px", height: "13px", color: "#818cf8" }} />
-                    <div>
-                      <div style={{ fontWeight: "500" }}>Open File(s)</div>
-                      <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)" }}>.md, .txt, .json, code</div>
-                    </div>
+                    <span>Open File(s)</span>
                   </button>
 
                   <button
                     onClick={() => { folderInputRef.current?.click(); setOpenMenuOpen(false); }}
                     style={{
                       width: "100%", display: "flex", alignItems: "center", gap: "8px",
-                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      padding: "7px 8px", borderRadius: "6px", border: "none",
                       background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
                       cursor: "pointer", textAlign: "left",
                     }}
@@ -1358,49 +1324,19 @@ export default function Home() {
                     onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                   >
                     <LucideFolderPlus style={{ width: "13px", height: "13px", color: "#38bdf8" }} />
-                    <div>
-                      <div style={{ fontWeight: "500" }}>Open Folder</div>
-                      <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)" }}>Batch import directory</div>
-                    </div>
+                    <span>Open Folder</span>
                   </button>
-                </div>
-              )}
-            </div>
 
-            {/* Download / Export Dropdown */}
-            <div style={{ position: "relative" }}>
-              <button
-                onClick={() => { setDownloadMenuOpen(!downloadMenuOpen); setOpenMenuOpen(false); setMoreMenuOpen(false); }}
-                style={{
-                  display: "flex", alignItems: "center", gap: "5px", padding: "7px 12px", borderRadius: "8px",
-                  background: downloadMenuOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.07)",
-                  border: downloadMenuOpen ? "1px solid rgba(99,102,241,0.4)" : "1px solid rgba(255,255,255,0.1)",
-                  color: "rgba(255,255,255,0.85)", fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none",
-                  transition: "all 0.15s ease",
-                }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.12)"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = downloadMenuOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.07)"; }}
-              >
-                <LucideDownload style={{ width: "13px", height: "13px", color: "#34d399" }} />
-                <span>Download</span>
-                <LucideChevronDown style={{ width: "12px", height: "12px", opacity: 0.6 }} />
-              </button>
+                  <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", margin: "4px 0" }} />
 
-              {downloadMenuOpen && (
-                <div style={{
-                  position: "absolute", left: 0, top: "40px", width: "230px",
-                  background: "rgba(20,20,35,0.98)", border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: "12px", padding: "6px", zIndex: 100,
-                  boxShadow: "0 16px 40px rgba(0,0,0,0.6)", backdropFilter: "blur(20px)",
-                }}>
-                  <div style={{ padding: "6px 10px", fontSize: "10px", color: "rgba(255,255,255,0.3)", fontWeight: "600", textTransform: "uppercase" }}>
+                  <div style={{ padding: "4px 8px", fontSize: "10px", color: "rgba(255,255,255,0.35)", fontWeight: "700", textTransform: "uppercase" }}>
                     Download Document
                   </div>
                   <button
-                    onClick={() => { downloadAsMarkdown(); setDownloadMenuOpen(false); }}
+                    onClick={() => { downloadAsMarkdown(); setOpenMenuOpen(false); }}
                     style={{
                       width: "100%", display: "flex", alignItems: "center", gap: "8px",
-                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      padding: "7px 8px", borderRadius: "6px", border: "none",
                       background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
                       cursor: "pointer", textAlign: "left",
                     }}
@@ -1412,10 +1348,10 @@ export default function Home() {
                   </button>
 
                   <button
-                    onClick={() => { downloadAsPlainText(); setDownloadMenuOpen(false); }}
+                    onClick={() => { downloadAsPlainText(); setOpenMenuOpen(false); }}
                     style={{
                       width: "100%", display: "flex", alignItems: "center", gap: "8px",
-                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      padding: "7px 8px", borderRadius: "6px", border: "none",
                       background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
                       cursor: "pointer", textAlign: "left",
                     }}
@@ -1427,10 +1363,10 @@ export default function Home() {
                   </button>
 
                   <button
-                    onClick={() => { downloadAsHtml(); setDownloadMenuOpen(false); }}
+                    onClick={() => { downloadAsHtml(); setOpenMenuOpen(false); }}
                     style={{
                       width: "100%", display: "flex", alignItems: "center", gap: "8px",
-                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      padding: "7px 8px", borderRadius: "6px", border: "none",
                       background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
                       cursor: "pointer", textAlign: "left",
                     }}
@@ -1442,10 +1378,10 @@ export default function Home() {
                   </button>
 
                   <button
-                    onClick={() => { window.print(); setDownloadMenuOpen(false); }}
+                    onClick={() => { window.print(); setOpenMenuOpen(false); }}
                     style={{
                       width: "100%", display: "flex", alignItems: "center", gap: "8px",
-                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      padding: "7px 8px", borderRadius: "6px", border: "none",
                       background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
                       cursor: "pointer", textAlign: "left",
                     }}
@@ -1459,10 +1395,10 @@ export default function Home() {
                   <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", margin: "4px 0" }} />
 
                   <button
-                    onClick={() => { downloadWorkspaceZip(); setDownloadMenuOpen(false); }}
+                    onClick={() => { downloadWorkspaceZip(); setOpenMenuOpen(false); }}
                     style={{
                       width: "100%", display: "flex", alignItems: "center", gap: "8px",
-                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      padding: "7px 8px", borderRadius: "6px", border: "none",
                       background: "rgba(16,185,129,0.1)", color: "#6ee7b7", fontSize: "12px", fontWeight: "600",
                       cursor: "pointer", textAlign: "left",
                     }}
@@ -1476,108 +1412,118 @@ export default function Home() {
               )}
             </div>
 
-            {/* Quick Copy Link Button */}
-            <button
-              onClick={() => {
-                if (shareUrl) {
-                  navigator.clipboard.writeText(shareUrl);
-                  setLinkCopied(true);
-                  setTimeout(() => setLinkCopied(false), 2000);
-                }
-              }}
-              style={{
-                display: "flex", alignItems: "center", gap: "6px", padding: "7px 13px", borderRadius: "8px",
-                background: linkCopied ? "rgba(16,185,129,0.12)" : "rgba(255,255,255,0.07)",
-                border: linkCopied ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(255,255,255,0.1)",
-                color: linkCopied ? "#10b981" : "rgba(255,255,255,0.7)",
-                fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none",
-                transition: "all 0.15s ease",
-              }}
-            >
-              {linkCopied ? <LucideCheck style={{ width: "13px", height: "13px" }} /> : <LucideLink2 style={{ width: "13px", height: "13px" }} />}
-              {linkCopied ? "Copied" : "Copy Link"}
-            </button>
-
-            {/* Share Modal Trigger */}
+            {/* Share Button (Opens full collaboration & kick modal) */}
             <button
               onClick={() => setShareModalOpen(true)}
               style={{
-                display: "flex", alignItems: "center", gap: "6px", padding: "7px 15px", borderRadius: "8px",
+                display: "flex", alignItems: "center", gap: "5px", padding: "6px 14px", borderRadius: "8px",
                 background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
                 border: "1px solid rgba(99,102,241,0.5)",
-                color: "white", fontSize: "13px", fontWeight: "600", cursor: "pointer", outline: "none",
-                boxShadow: "0 0 20px rgba(99,102,241,0.35)",
+                color: "white", fontSize: "12px", fontWeight: "600", cursor: "pointer", outline: "none",
+                boxShadow: "0 0 16px rgba(99,102,241,0.35)",
+                transition: "all 0.15s ease",
               }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "0 0 24px rgba(99,102,241,0.6)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "0 0 16px rgba(99,102,241,0.35)"; }}
             >
-              <LucideZap style={{ width: "13px", height: "13px" }} />
-              Share
+              <LucideZap style={{ width: "12px", height: "12px" }} />
+              <span>Share</span>
             </button>
 
             {/* More Options Dropdown */}
             <div style={{ position: "relative" }}>
               <button
-                onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+                onClick={() => { setMoreMenuOpen(!moreMenuOpen); setOpenMenuOpen(false); }}
                 style={{
-                  width: "32px", height: "32px", borderRadius: "8px",
+                  width: "30px", height: "30px", borderRadius: "8px",
                   background: moreMenuOpen ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.05)",
                   border: "1px solid rgba(255,255,255,0.08)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   cursor: "pointer", outline: "none",
                 }}
               >
-                <LucideMoreHorizontal style={{ width: "15px", height: "15px", color: "rgba(255,255,255,0.6)" }} />
+                <LucideMoreHorizontal style={{ width: "14px", height: "14px", color: "rgba(255,255,255,0.7)" }} />
               </button>
 
               {moreMenuOpen && (
                 <div style={{
-                  position: "absolute", right: 0, top: "40px", width: "220px",
+                  position: "absolute", right: 0, top: "36px", width: "220px",
                   background: "rgba(20,20,35,0.98)", border: "1px solid rgba(255,255,255,0.1)",
                   borderRadius: "12px", padding: "6px", zIndex: 100,
                   boxShadow: "0 16px 40px rgba(0,0,0,0.6)", backdropFilter: "blur(20px)",
                 }}>
-                  <div style={{ padding: "6px 10px", fontSize: "10px", color: "rgba(255,255,255,0.3)", fontWeight: "600", textTransform: "uppercase" }}>
+                  <div style={{ padding: "6px 8px", fontSize: "10px", color: "rgba(255,255,255,0.3)", fontWeight: "600", textTransform: "uppercase" }}>
                     Stats: {wordCount} words · {charCount} chars
                   </div>
+
                   <button
-                    onClick={() => { downloadAsMarkdown(); setMoreMenuOpen(false); }}
+                    onClick={() => { setJoinModalOpen(true); setMoreMenuOpen(false); }}
                     style={{
                       width: "100%", display: "flex", alignItems: "center", gap: "8px",
-                      padding: "8px 10px", borderRadius: "7px", border: "none",
-                      background: "transparent", color: "rgba(255,255,255,0.8)", fontSize: "12px",
+                      padding: "7px 8px", borderRadius: "6px", border: "none",
+                      background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
                       cursor: "pointer", textAlign: "left",
                     }}
                     onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; }}
                     onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                   >
-                    <LucideDownload style={{ width: "13px", height: "13px", color: "#818cf8" }} />
-                    Export as Markdown
+                    <LucideUserPlus style={{ width: "13px", height: "13px", color: "#a5b4fc" }} />
+                    <span>Join Shared Workspace</span>
                   </button>
+
                   <button
                     onClick={() => {
-                      if (confirm("Clear all editor content?")) {
-                        editorRef.current?.clearContent();
+                      if (shareUrl) {
+                        navigator.clipboard.writeText(shareUrl);
+                        setLinkCopied(true);
+                        setToastMessage("Invite link copied to clipboard");
+                        setTimeout(() => setToastMessage(null), 2500);
                         setMoreMenuOpen(false);
                       }
                     }}
                     style={{
                       width: "100%", display: "flex", alignItems: "center", gap: "8px",
-                      padding: "8px 10px", borderRadius: "7px", border: "none",
-                      background: "transparent", color: "rgba(255,255,255,0.8)", fontSize: "12px",
+                      padding: "7px 8px", borderRadius: "6px", border: "none",
+                      background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  >
+                    <LucideLink2 style={{ width: "13px", height: "13px", color: "#38bdf8" }} />
+                    <span>Copy Secret Invite Link</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      if (confirm("Clear all editor content?")) {
+                        editorRef.current?.clearContent();
+                        setToastMessage("Document content cleared");
+                        setTimeout(() => setToastMessage(null), 2000);
+                        setMoreMenuOpen(false);
+                      }
+                    }}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                      padding: "7px 8px", borderRadius: "6px", border: "none",
+                      background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
                       cursor: "pointer", textAlign: "left",
                     }}
                     onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; }}
                     onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                   >
                     <LucideRotateCcw style={{ width: "13px", height: "13px", color: "#fbbf24" }} />
-                    Clear Document
+                    <span>Clear Document Content</span>
                   </button>
+
                   <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", margin: "4px 0" }} />
+
                   {isCollaborator ? (
                     <button
-                      onClick={() => handleLeaveDocument()}
+                      onClick={() => { handleLeaveDocument(); setMoreMenuOpen(false); }}
                       style={{
                         width: "100%", display: "flex", alignItems: "center", gap: "8px",
-                        padding: "8px 10px", borderRadius: "7px", border: "none",
+                        padding: "7px 8px", borderRadius: "6px", border: "none",
                         background: "transparent", color: "#f43f5e", fontSize: "12px",
                         cursor: "pointer", textAlign: "left",
                       }}
@@ -1585,15 +1531,15 @@ export default function Home() {
                       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                     >
                       <LucideLogOut style={{ width: "13px", height: "13px" }} />
-                      Exit Collaboration
+                      <span>Exit Collaboration</span>
                     </button>
                   ) : (
                     <>
                       <button
-                        onClick={handleAdminExitCollab}
+                        onClick={() => { handleAdminExitCollab(); setMoreMenuOpen(false); }}
                         style={{
                           width: "100%", display: "flex", alignItems: "center", gap: "8px",
-                          padding: "8px 10px", borderRadius: "7px", border: "none",
+                          padding: "7px 8px", borderRadius: "6px", border: "none",
                           background: "transparent", color: "#fbbf24", fontSize: "12px",
                           cursor: "pointer", textAlign: "left",
                         }}
@@ -1601,13 +1547,14 @@ export default function Home() {
                         onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                       >
                         <LucideUserX style={{ width: "13px", height: "13px" }} />
-                        End Collab (Kick All)
+                        <span>End Collaboration (Kick All)</span>
                       </button>
+
                       <button
-                        onClick={deleteActiveDocument}
+                        onClick={() => { deleteActiveDocument(); setMoreMenuOpen(false); }}
                         style={{
                           width: "100%", display: "flex", alignItems: "center", gap: "8px",
-                          padding: "8px 10px", borderRadius: "7px", border: "none",
+                          padding: "7px 8px", borderRadius: "6px", border: "none",
                           background: "transparent", color: "#f43f5e", fontSize: "12px",
                           cursor: "pointer", textAlign: "left",
                         }}
@@ -1615,7 +1562,7 @@ export default function Home() {
                         onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                       >
                         <LucideTrash2 style={{ width: "13px", height: "13px" }} />
-                        Delete Document
+                        <span>Delete Document</span>
                       </button>
                     </>
                   )}

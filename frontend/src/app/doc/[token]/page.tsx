@@ -206,46 +206,85 @@ export default function SharedDocPage() {
         <header style={{
           display: zenMode ? "none" : "flex",
           alignItems: "center", justifyContent: "space-between",
-          padding: "0 28px", height: "56px", background: "rgba(8,8,16,0.7)",
+          padding: "0 20px", height: "54px", minHeight: "54px", background: "rgba(8,8,16,0.75)",
           borderBottom: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(20px)",
+          gap: "12px", overflow: "hidden",
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div style={{ width: "28px", height: "28px", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "800", color: "white", boxShadow: "0 0 12px rgba(99,102,241,0.4)" }}>SF</div>
-            <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "13px" }}>Shared Workspace</span>
-            <LucideChevronRight style={{ width: "12px", height: "12px", color: "rgba(255,255,255,0.2)" }} />
-            <span style={{ color: "rgba(255,255,255,0.9)", fontSize: "13px", fontWeight: "600" }}>{docTitle}</span>
-            <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "20px", background: "rgba(99,102,241,0.15)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.25)", fontWeight: "600" }}>
-              Collaborator View
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, flexShrink: 1 }}>
+            <div style={{ width: "26px", height: "26px", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", borderRadius: "7px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "800", color: "white", boxShadow: "0 0 12px rgba(99,102,241,0.4)", flexShrink: 0 }}>SF</div>
+            <span style={{ color: "rgba(255,255,255,0.35)", fontSize: "12px", fontWeight: "500", flexShrink: 0 }}>Shared</span>
+            <LucideChevronRight style={{ width: "12px", height: "12px", color: "rgba(255,255,255,0.15)", flexShrink: 0 }} />
+            <div style={{
+              color: "rgba(255,255,255,0.9)", fontSize: "13px", fontWeight: "600",
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              maxWidth: "200px", background: "rgba(255,255,255,0.06)", padding: "3px 8px", borderRadius: "6px",
+            }}>
+              {docTitle || "Untitled Document"}
+            </div>
+            <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "6px", background: "rgba(99,102,241,0.15)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.25)", fontWeight: "600", flexShrink: 0 }}>
+              Guest
             </span>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
             {/* Live presence */}
             {presence.length > 0 && (
               <div style={{ display: "flex", alignItems: "center" }}>
-                {presence.slice(0, 4).map((user, i) => (
-                  <div key={i} title={user.name} style={{ width: "28px", height: "28px", borderRadius: "50%", background: user.color, border: "2px solid #080810", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: "700", color: "white", marginLeft: i > 0 ? "-8px" : "0", boxShadow: `0 0 10px ${user.color}66`, position: "relative", zIndex: presence.length - i }}>
+                {presence.slice(0, 3).map((user, i) => (
+                  <div key={i} title={user.name} style={{
+                    width: "26px", height: "26px", borderRadius: "50%",
+                    background: user.color, border: "2px solid #080810",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: "9px", fontWeight: "700", color: "white",
+                    marginLeft: i > 0 ? "-7px" : "0",
+                    boxShadow: `0 0 8px ${user.color}66`, position: "relative", zIndex: presence.length - i,
+                  }}>
                     {user.name.slice(0, 2).toUpperCase()}
                   </div>
                 ))}
+                {presence.length > 3 && (
+                  <div style={{
+                    width: "22px", height: "22px", borderRadius: "50%",
+                    background: "rgba(255,255,255,0.12)", border: "2px solid #080810",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: "9px", fontWeight: "700", color: "rgba(255,255,255,0.8)",
+                    marginLeft: "-6px", zIndex: 0, position: "relative",
+                  }}>
+                    +{presence.length - 3}
+                  </div>
+                )}
               </div>
             )}
 
             {/* Connection dot */}
-            <div style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 10px", borderRadius: "20px", background: isConnected ? "rgba(16,185,129,0.08)" : "rgba(244,63,94,0.08)", border: `1px solid ${isConnected ? "rgba(16,185,129,0.2)" : "rgba(244,63,94,0.2)"}` }}>
-              <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: isConnected ? "#10b981" : "#f43f5e", boxShadow: `0 0 6px ${isConnected ? "rgba(16,185,129,0.8)" : "rgba(244,63,94,0.8)"}` }} />
-              <span style={{ fontSize: "11px", color: isConnected ? "rgba(16,185,129,0.8)" : "rgba(244,63,94,0.8)", fontWeight: "500" }}>
-                {isConnected ? "Live Sync" : "Connecting..."}
-              </span>
+            <div style={{
+              display: "flex", alignItems: "center", gap: "4px",
+              padding: "2px 6px", borderRadius: "6px",
+              background: "rgba(255,255,255,0.03)", fontSize: "11px", color: "rgba(255,255,255,0.3)",
+            }}>
+              <div style={{
+                width: "5px", height: "5px", borderRadius: "50%",
+                background: isConnected ? "#10b981" : "#f43f5e",
+                boxShadow: isConnected ? "0 0 6px rgba(16,185,129,0.8)" : "none",
+              }} />
+              <span>{isConnected ? "Live" : "Offline"}</span>
             </div>
 
             {/* AI button */}
             <button
               onClick={() => setAiPanelOpen(!aiPanelOpen)}
-              style={{ display: "flex", alignItems: "center", gap: "6px", padding: "7px 14px", borderRadius: "8px", background: aiPanelOpen ? "rgba(99,102,241,0.25)" : "rgba(255,255,255,0.07)", border: aiPanelOpen ? "1px solid rgba(99,102,241,0.4)" : "1px solid rgba(255,255,255,0.1)", color: aiPanelOpen ? "rgba(139,92,246,0.95)" : "rgba(255,255,255,0.75)", fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none", transition: "all 0.15s ease" }}
+              style={{
+                display: "flex", alignItems: "center", gap: "5px",
+                padding: "6px 12px", borderRadius: "8px",
+                background: aiPanelOpen ? "rgba(99,102,241,0.22)" : "rgba(255,255,255,0.06)",
+                border: aiPanelOpen ? "1px solid rgba(99,102,241,0.45)" : "1px solid rgba(255,255,255,0.09)",
+                color: aiPanelOpen ? "#c7d2fe" : "rgba(255,255,255,0.8)",
+                fontSize: "12px", fontWeight: "600", cursor: "pointer", outline: "none",
+                transition: "all 0.15s ease",
+              }}
             >
-              <LucideSparkles style={{ width: "13px", height: "13px" }} />
-              Gemini AI
+              <LucideSparkles style={{ width: "13px", height: "13px", color: "#a5b4fc" }} />
+              <span>AI</span>
             </button>
 
             {/* Download Dropdown */}
@@ -253,21 +292,21 @@ export default function SharedDocPage() {
               <button
                 onClick={() => setDownloadMenuOpen(!downloadMenuOpen)}
                 style={{
-                  display: "flex", alignItems: "center", gap: "5px", padding: "7px 12px", borderRadius: "8px",
-                  background: downloadMenuOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.07)",
-                  border: downloadMenuOpen ? "1px solid rgba(99,102,241,0.4)" : "1px solid rgba(255,255,255,0.1)",
-                  color: "rgba(255,255,255,0.85)", fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none",
+                  display: "flex", alignItems: "center", gap: "5px", padding: "6px 11px", borderRadius: "8px",
+                  background: downloadMenuOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.06)",
+                  border: downloadMenuOpen ? "1px solid rgba(99,102,241,0.4)" : "1px solid rgba(255,255,255,0.09)",
+                  color: "rgba(255,255,255,0.85)", fontSize: "12px", fontWeight: "500", cursor: "pointer", outline: "none",
                   transition: "all 0.15s ease",
                 }}
               >
                 <LucideDownload style={{ width: "13px", height: "13px", color: "#34d399" }} />
                 <span>Download</span>
-                <LucideChevronDown style={{ width: "12px", height: "12px", opacity: 0.6 }} />
+                <LucideChevronDown style={{ width: "11px", height: "11px", opacity: 0.6 }} />
               </button>
 
               {downloadMenuOpen && (
                 <div style={{
-                  position: "absolute", right: 0, top: "40px", width: "200px",
+                  position: "absolute", right: 0, top: "36px", width: "200px",
                   background: "rgba(20,20,35,0.98)", border: "1px solid rgba(255,255,255,0.1)",
                   borderRadius: "12px", padding: "6px", zIndex: 100,
                   boxShadow: "0 16px 40px rgba(0,0,0,0.6)", backdropFilter: "blur(20px)",
@@ -276,7 +315,7 @@ export default function SharedDocPage() {
                     onClick={() => { downloadAsMarkdown(); setDownloadMenuOpen(false); }}
                     style={{
                       width: "100%", display: "flex", alignItems: "center", gap: "8px",
-                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      padding: "7px 8px", borderRadius: "6px", border: "none",
                       background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
                       cursor: "pointer", textAlign: "left",
                     }}
@@ -291,7 +330,7 @@ export default function SharedDocPage() {
                     onClick={() => { downloadAsPlainText(); setDownloadMenuOpen(false); }}
                     style={{
                       width: "100%", display: "flex", alignItems: "center", gap: "8px",
-                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      padding: "7px 8px", borderRadius: "6px", border: "none",
                       background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
                       cursor: "pointer", textAlign: "left",
                     }}
@@ -306,7 +345,7 @@ export default function SharedDocPage() {
                     onClick={() => { downloadAsHtml(); setDownloadMenuOpen(false); }}
                     style={{
                       width: "100%", display: "flex", alignItems: "center", gap: "8px",
-                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      padding: "7px 8px", borderRadius: "6px", border: "none",
                       background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
                       cursor: "pointer", textAlign: "left",
                     }}
@@ -321,7 +360,7 @@ export default function SharedDocPage() {
                     onClick={() => { window.print(); setDownloadMenuOpen(false); }}
                     style={{
                       width: "100%", display: "flex", alignItems: "center", gap: "8px",
-                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      padding: "7px 8px", borderRadius: "6px", border: "none",
                       background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
                       cursor: "pointer", textAlign: "left",
                     }}
@@ -340,7 +379,7 @@ export default function SharedDocPage() {
               onClick={handleLeave}
               title="Exit collaboration and leave this shared workspace"
               style={{
-                display: "flex", alignItems: "center", gap: "6px", padding: "7px 13px", borderRadius: "8px",
+                display: "flex", alignItems: "center", gap: "5px", padding: "6px 11px", borderRadius: "8px",
                 background: "rgba(244,63,94,0.12)", border: "1px solid rgba(244,63,94,0.3)",
                 color: "#fca5a5", fontSize: "12px", fontWeight: "500", cursor: "pointer", outline: "none",
                 transition: "all 0.15s ease",
@@ -348,15 +387,21 @@ export default function SharedDocPage() {
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(244,63,94,0.22)"; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(244,63,94,0.12)"; }}
             >
-              <LucideLogOut style={{ width: "13px", height: "13px", color: "#f43f5e" }} />
-              <span>Exit Collaboration</span>
+              <LucideLogOut style={{ width: "12px", height: "12px", color: "#f43f5e" }} />
+              <span>Exit</span>
             </button>
 
             <button
               onClick={() => router.push("/")}
-              style={{ padding: "7px 14px", borderRadius: "8px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)", fontSize: "12px", fontWeight: "500", cursor: "pointer", outline: "none" }}
+              style={{
+                padding: "6px 11px", borderRadius: "8px",
+                background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)",
+                color: "rgba(255,255,255,0.75)", fontSize: "12px", fontWeight: "500", cursor: "pointer", outline: "none",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.12)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)"; }}
             >
-              My Workspace
+              Workspace
             </button>
           </div>
         </header>

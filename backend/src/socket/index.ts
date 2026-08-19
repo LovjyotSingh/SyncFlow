@@ -12,6 +12,9 @@ export interface PresenceUser {
 // Track presence: { documentId: { socketId: PresenceUser } }
 const presenceMap: Record<string, Record<string, PresenceUser>> = {};
 
+// Track kicked identifiers to prevent reconnection or ghost edits: { documentId: Set<string> }
+const kickedMap: Record<string, Set<string>> = {};
+
 let globalIo: Server | null = null;
 
 const COLORS = [
@@ -28,22 +31,46 @@ function broadcastPresence(io: Server, documentId: string) {
   io.to(documentId).emit('presence-update', users);
 }
 
+function markKicked(documentId: string, identifier?: string) {
+  if (!identifier) return;
+  if (!kickedMap[documentId]) kickedMap[documentId] = new Set();
+  kickedMap[documentId].add(identifier.toLowerCase());
+}
+
+function isKicked(documentId: string, socketId?: string, userId?: string, name?: string): boolean {
+  const set = kickedMap[documentId];
+  if (!set) return false;
+  if (socketId && set.has(socketId.toLowerCase())) return true;
+  if (userId && set.has(userId.toLowerCase())) return true;
+  if (name && set.has(name.toLowerCase())) return true;
+  return false;
+}
+
 export const kickUserFromDocument = (documentId: string, targetUserId: string) => {
-  if (!globalIo || !presenceMap[documentId]) return;
+  if (!globalIo) return;
+  markKicked(documentId, targetUserId);
+
+  if (!presenceMap[documentId]) return;
   const socketsToKick: string[] = [];
   for (const [sockId, user] of Object.entries(presenceMap[documentId])) {
-    if (user.userId === targetUserId) {
+    if (user.userId === targetUserId || user.socketId === targetUserId) {
       socketsToKick.push(sockId);
+      markKicked(documentId, sockId);
+      markKicked(documentId, user.name);
     }
   }
+
   for (const sId of socketsToKick) {
-    globalIo.to(sId).emit('kicked', {
-      documentId,
-      message: 'You have been removed from this workspace by the owner.',
-    });
-    delete presenceMap[documentId][sId];
     const targetSock = globalIo.sockets.sockets.get(sId);
-    if (targetSock) targetSock.leave(documentId);
+    if (targetSock) {
+      targetSock.emit('kicked', {
+        documentId,
+        message: 'You have been removed from this workspace by the owner.',
+      });
+      targetSock.leave(documentId);
+      targetSock.disconnect(true);
+    }
+    delete presenceMap[documentId][sId];
   }
   broadcastPresence(globalIo, documentId);
 };
@@ -54,16 +81,23 @@ export const kickAllFromDocument = (documentId: string, ownerUserId: string) => 
   for (const [sockId, user] of Object.entries(presenceMap[documentId])) {
     if (user.userId !== ownerUserId) {
       socketsToKick.push(sockId);
+      markKicked(documentId, sockId);
+      if (user.userId) markKicked(documentId, user.userId);
+      markKicked(documentId, user.name);
     }
   }
+
   for (const sId of socketsToKick) {
-    globalIo.to(sId).emit('kicked', {
-      documentId,
-      message: 'The workspace owner has ended collaboration and made this document private.',
-    });
-    delete presenceMap[documentId][sId];
     const targetSock = globalIo.sockets.sockets.get(sId);
-    if (targetSock) targetSock.leave(documentId);
+    if (targetSock) {
+      targetSock.emit('kicked', {
+        documentId,
+        message: 'The workspace owner has ended collaboration and made this document private.',
+      });
+      targetSock.leave(documentId);
+      targetSock.disconnect(true);
+    }
+    delete presenceMap[documentId][sId];
   }
   broadcastPresence(globalIo, documentId);
 };
@@ -78,9 +112,6 @@ export const setupSocket = (io: Server, redisClient: any) => {
 
     // Join a specific document room
     socket.on('join-document', async (documentId: string, userData?: any) => {
-      socket.join(documentId);
-      currentDocId = documentId;
-
       let name = `Guest ${socket.id.slice(0, 4)}`;
       let userId: string | undefined = undefined;
       let color = getRandomColor();
@@ -92,6 +123,20 @@ export const setupSocket = (io: Server, redisClient: any) => {
       } else if (typeof userData === 'string' && userData.trim()) {
         name = userData.trim();
       }
+
+      // Check if user was previously kicked from this document
+      if (isKicked(documentId, socket.id, userId, name)) {
+        console.warn(`🛑 Rejected rejoin attempt for kicked user ${name} (${socket.id}) on doc ${documentId}`);
+        socket.emit('kicked', {
+          documentId,
+          message: 'You were removed from this workspace by the owner and cannot rejoin.',
+        });
+        socket.disconnect(true);
+        return;
+      }
+
+      socket.join(documentId);
+      currentDocId = documentId;
 
       console.log(`User ${socket.id} (${name}, uid: ${userId}) joined document ${documentId}`);
 
@@ -129,6 +174,11 @@ export const setupSocket = (io: Server, redisClient: any) => {
 
       console.log(`👢 Kick event received for ${targetName || targetUserId || targetSocketId} in doc ${documentId}`);
 
+      // Register in kicked blocklist
+      markKicked(documentId, targetSocketId);
+      markKicked(documentId, targetUserId);
+      markKicked(documentId, targetName);
+
       const socketsToKick: string[] = [];
       for (const [sockId, user] of Object.entries(presenceMap[documentId])) {
         if (
@@ -137,24 +187,42 @@ export const setupSocket = (io: Server, redisClient: any) => {
           (targetName && user.name.toLowerCase() === targetName.toLowerCase())
         ) {
           socketsToKick.push(sockId);
+          markKicked(documentId, sockId);
+          if (user.userId) markKicked(documentId, user.userId);
+          markKicked(documentId, user.name);
         }
       }
 
       for (const sId of socketsToKick) {
-        io.to(sId).emit('kicked', {
-          documentId,
-          message: 'You have been kicked from this workspace by the owner.',
-        });
-        delete presenceMap[documentId][sId];
         const targetSock = io.sockets.sockets.get(sId);
-        if (targetSock) targetSock.leave(documentId);
+        if (targetSock) {
+          targetSock.emit('kicked', {
+            documentId,
+            message: 'You have been kicked from this workspace by the owner.',
+          });
+          targetSock.leave(documentId);
+          targetSock.disconnect(true);
+        }
+        delete presenceMap[documentId][sId];
       }
 
       broadcastPresence(io, documentId);
     });
 
-    // Handle document changes
+    // Handle document changes with strict membership verification
     socket.on('send-changes', async (documentId: string, content: any) => {
+      // Security check: Only broadcast if the sender is currently a verified member of this room
+      if (!presenceMap[documentId]?.[socket.id]) {
+        console.warn(`🛑 Blocked unauthorized edits from socket ${socket.id} on doc ${documentId}`);
+        socket.emit('kicked', {
+          documentId,
+          message: 'You do not have permission to edit this document.',
+        });
+        socket.leave(documentId);
+        socket.disconnect(true);
+        return;
+      }
+
       // Broadcast to everyone else in the room
       socket.to(documentId).emit('receive-changes', content);
 

@@ -33,6 +33,8 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
 ) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [isKickedState, setIsKickedState] = useState(false);
+  const isKickedRef = useRef(false);
   const isApplyingRemote = useRef(false);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -77,7 +79,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
       }
     },
     insertContent: async (text: string) => {
-      if (!text?.trim()) return;
+      if (isKickedRef.current || !text?.trim()) return;
       try {
         const blocks = await editor.tryParseMarkdownToBlocks(text);
         if (blocks && blocks.length > 0) {
@@ -104,6 +106,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
       }
     },
     clearContent: () => {
+      if (isKickedRef.current) return;
       editor.replaceBlocks(editor.document, [{ type: "paragraph", content: "" }]);
       if (socket && isConnected) {
         socket.emit("send-changes", documentId, editor.document);
@@ -120,6 +123,9 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
   useEffect(() => {
     if (!documentId) return;
 
+    isKickedRef.current = false;
+    setIsKickedState(false);
+
     const s = io(BACKEND_URL, {
       transports: ["websocket", "polling"],
       reconnection: true,
@@ -129,6 +135,10 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
     });
 
     s.on("connect", () => {
+      if (isKickedRef.current) {
+        s.disconnect();
+        return;
+      }
       setIsConnected(true);
       onConnectionChangeRef.current?.(true);
       const user = getUser();
@@ -152,6 +162,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
 
     // Load persisted document state when joining
     s.on("load-document", (savedBlocks) => {
+      if (isKickedRef.current) return;
       if (savedBlocks && Array.isArray(savedBlocks) && savedBlocks.length > 0) {
         isApplyingRemote.current = true;
         editor.replaceBlocks(editor.document, savedBlocks);
@@ -163,6 +174,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
 
     // Receive live changes from other users
     s.on("receive-changes", (incomingBlocks) => {
+      if (isKickedRef.current) return;
       isApplyingRemote.current = true;
       editor.replaceBlocks(editor.document, incomingBlocks);
       setTimeout(() => {
@@ -172,18 +184,22 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
 
     // Receive presence updates
     s.on("presence-update", (users: Presence[]) => {
+      if (isKickedRef.current) return;
       onPresenceChangeRef.current?.(users);
     });
 
-    // Handle being kicked by owner
+    // Handle being kicked by owner: immediately terminate session and lock UI
     s.on("kicked", (data: any) => {
       const msg = data?.message || "You have been removed from this workspace by the owner.";
-      if (onKickedRef.current) {
-        onKickedRef.current(msg);
-      } else {
-        alert(msg);
-        window.location.href = "/";
-      }
+      isKickedRef.current = true;
+      setIsKickedState(true);
+      setIsConnected(false);
+      onConnectionChangeRef.current?.(false);
+      s.disconnect();
+      try {
+        editor.replaceBlocks(editor.document, [{ type: "paragraph", content: "🚫 Access Revoked: You have been removed from this workspace." }]);
+      } catch {}
+      onKickedRef.current?.(msg);
     });
 
     setSocket(s);
@@ -201,7 +217,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
   }, [documentId]);
 
   const onChange = () => {
-    if (!socket || isApplyingRemote.current) return;
+    if (isKickedRef.current || !socket || isApplyingRemote.current) return;
 
     // Notify parent of text change
     try {
@@ -256,9 +272,45 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
             color: isConnected ? "rgba(16,185,129,0.7)" : "rgba(244,63,94,0.7)",
           }}
         >
-          {isConnected ? "Live Sync" : "Connecting..."}
+          {isConnected ? "Live Sync" : isKickedState ? "Disconnected (Kicked)" : "Connecting..."}
         </span>
       </div>
+
+      {/* Access Revoked Overlay */}
+      {isKickedState && (
+        <div style={{
+          position: "absolute", inset: "-8px", zIndex: 50,
+          background: "rgba(10,10,20,0.94)", backdropFilter: "blur(14px)",
+          borderRadius: "16px", display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", padding: "40px 20px", textAlign: "center",
+          border: "1px solid rgba(244,63,94,0.25)", boxShadow: "0 20px 50px rgba(0,0,0,0.8)",
+        }}>
+          <div style={{
+            width: "56px", height: "56px", borderRadius: "18px",
+            background: "rgba(244,63,94,0.12)", border: "1px solid rgba(244,63,94,0.3)",
+            display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px",
+          }}>
+            <span style={{ fontSize: "26px" }}>🚫</span>
+          </div>
+          <h3 style={{ color: "#fca5a5", fontSize: "18px", fontWeight: "700", marginBottom: "8px" }}>
+            Access Revoked
+          </h3>
+          <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "13px", maxWidth: "340px", lineHeight: "1.5", marginBottom: "20px" }}>
+            You have been removed from this workspace by the owner. You can no longer view or edit this document.
+          </p>
+          <button
+            onClick={() => { window.location.href = "/"; }}
+            style={{
+              padding: "9px 20px", borderRadius: "8px",
+              background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+              border: "none", color: "white", fontSize: "13px", fontWeight: "600",
+              cursor: "pointer", boxShadow: "0 0 16px rgba(99,102,241,0.4)",
+            }}
+          >
+            Return to My Workspace
+          </button>
+        </div>
+      )}
 
       <BlockNoteView
         editor={editor}

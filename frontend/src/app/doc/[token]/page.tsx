@@ -21,6 +21,25 @@ export default function SharedDocPage() {
   const [presence, setPresence] = useState<Presence[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [zenMode, setZenMode] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && zenMode) {
+        setZenMode(false);
+      }
+    };
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, [zenMode]);
 
   const editorRef = useRef<EditorHandle | null>(null);
 
@@ -128,7 +147,12 @@ export default function SharedDocPage() {
 
       <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative", zIndex: 10 }}>
         {/* Header */}
-        <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 28px", height: "56px", background: "rgba(8,8,16,0.7)", borderBottom: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(20px)" }}>
+        <header style={{
+          display: zenMode ? "none" : "flex",
+          alignItems: "center", justifyContent: "space-between",
+          padding: "0 28px", height: "56px", background: "rgba(8,8,16,0.7)",
+          borderBottom: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(20px)",
+        }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <div style={{ width: "28px", height: "28px", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "800", color: "white", boxShadow: "0 0 12px rgba(99,102,241,0.4)" }}>SF</div>
             <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "13px" }}>Shared Workspace</span>
@@ -208,15 +232,107 @@ export default function SharedDocPage() {
               <div style={{ position: "relative" }}>
                 <div style={{ position: "absolute", inset: "-1px", borderRadius: "18px", background: "linear-gradient(135deg, rgba(99,102,241,0.25), rgba(139,92,246,0.15), rgba(6,182,212,0.1))", zIndex: 0 }} />
                 <div style={{ position: "relative", zIndex: 1, background: "rgba(15,15,25,0.95)", backdropFilter: "blur(20px)", borderRadius: "17px", overflow: "hidden", boxShadow: "0 8px 60px rgba(0,0,0,0.5)" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
-                    <div style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#ff5f57" }} />
-                    <div style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#febc2e" }} />
-                    <div style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#28c840" }} />
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: "8px",
+                    padding: "12px 18px", borderBottom: "1px solid rgba(255,255,255,0.06)",
+                    background: "rgba(255,255,255,0.02)",
+                  }}>
+                    {/* Traffic Light Buttons */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+                      {/* Red: Clear Content */}
+                      <button
+                        onClick={() => {
+                          if (confirm("Clear all content in this document?")) {
+                            editorRef.current?.clearContent();
+                          }
+                        }}
+                        title="Clear Document Content (Red Dot)"
+                        style={{
+                          width: "12px", height: "12px", borderRadius: "50%",
+                          background: "#ff5f57", border: "none", cursor: "pointer",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          padding: 0, transition: "all 0.15s ease", outline: "none",
+                          boxShadow: "0 0 6px rgba(255,95,87,0.4)",
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLElement).style.transform = "scale(1.25)";
+                          (e.currentTarget as HTMLElement).style.boxShadow = "0 0 10px rgba(255,95,87,0.9)";
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLElement).style.transform = "scale(1)";
+                          (e.currentTarget as HTMLElement).style.boxShadow = "0 0 6px rgba(255,95,87,0.4)";
+                        }}
+                      />
+
+                      {/* Yellow / Orange: Zen Focus Mode */}
+                      <button
+                        onClick={() => setZenMode(!zenMode)}
+                        title={zenMode ? "Exit Zen Focus Mode (Yellow Dot)" : "Toggle Zen Focus Mode (Yellow Dot)"}
+                        style={{
+                          width: "12px", height: "12px", borderRadius: "50%",
+                          background: "#febc2e", border: "none", cursor: "pointer",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          padding: 0, transition: "all 0.15s ease", outline: "none",
+                          boxShadow: zenMode ? "0 0 10px rgba(254,188,46,0.9)" : "0 0 6px rgba(254,188,46,0.4)",
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLElement).style.transform = "scale(1.25)";
+                          (e.currentTarget as HTMLElement).style.boxShadow = "0 0 10px rgba(254,188,46,0.9)";
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLElement).style.transform = "scale(1)";
+                          (e.currentTarget as HTMLElement).style.boxShadow = zenMode ? "0 0 10px rgba(254,188,46,0.9)" : "0 0 6px rgba(254,188,46,0.4)";
+                        }}
+                      />
+
+                      {/* Green: Fullscreen Toggle */}
+                      <button
+                        onClick={() => {
+                          if (!document.fullscreenElement) {
+                            document.documentElement.requestFullscreen().catch(() => {});
+                            setIsFullscreen(true);
+                          } else {
+                            document.exitFullscreen().catch(() => {});
+                            setIsFullscreen(false);
+                          }
+                        }}
+                        title={isFullscreen ? "Exit Fullscreen (Green Dot)" : "Toggle Fullscreen (Green Dot)"}
+                        style={{
+                          width: "12px", height: "12px", borderRadius: "50%",
+                          background: "#28c840", border: "none", cursor: "pointer",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          padding: 0, transition: "all 0.15s ease", outline: "none",
+                          boxShadow: isFullscreen ? "0 0 10px rgba(40,200,64,0.9)" : "0 0 6px rgba(40,200,64,0.4)",
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLElement).style.transform = "scale(1.25)";
+                          (e.currentTarget as HTMLElement).style.boxShadow = "0 0 10px rgba(40,200,64,0.9)";
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLElement).style.transform = "scale(1)";
+                          (e.currentTarget as HTMLElement).style.boxShadow = isFullscreen ? "0 0 10px rgba(40,200,64,0.9)" : "0 0 6px rgba(40,200,64,0.4)";
+                        }}
+                      />
+                    </div>
+
                     <div style={{ flex: 1, textAlign: "center" }}>
                       <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.2)", fontWeight: "500" }}>
-                        syncflow · shared channel ({docId.slice(-6)})
+                        syncflow · shared channel ({docId.slice(-6)}) {zenMode && "· [Zen Mode Active]"}
                       </span>
                     </div>
+
+                    {zenMode && (
+                      <button
+                        onClick={() => setZenMode(false)}
+                        style={{
+                          fontSize: "11px", color: "#febc2e", background: "rgba(254,188,46,0.12)",
+                          border: "1px solid rgba(254,188,46,0.3)", borderRadius: "6px",
+                          padding: "2px 8px", cursor: "pointer", fontWeight: "600",
+                        }}
+                      >
+                        Exit Zen (Esc)
+                      </button>
+                    )}
                   </div>
                   <div style={{ padding: "24px 32px 32px" }} className="editor-dark-wrapper">
                     {docId && (

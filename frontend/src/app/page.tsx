@@ -59,6 +59,27 @@ export default function Home() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [zenMode, setZenMode] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && zenMode) {
+        setZenMode(false);
+        setToastMessage("Zen Mode Deactivated");
+        setTimeout(() => setToastMessage(null), 2500);
+      }
+    };
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, [zenMode]);
 
   // Join Document states
   const [joinInput, setJoinInput] = useState("");
@@ -572,12 +593,15 @@ export default function Home() {
 
       {/* ─── SIDEBAR ─── */}
       <aside style={{
-        width: "260px", minWidth: "260px",
+        width: zenMode ? "0px" : "260px",
+        minWidth: zenMode ? "0px" : "260px",
         background: "rgba(10,10,20,0.85)",
-        borderRight: "1px solid rgba(255,255,255,0.07)",
-        display: "flex", flexDirection: "column",
+        borderRight: zenMode ? "none" : "1px solid rgba(255,255,255,0.07)",
+        display: zenMode ? "none" : "flex",
+        flexDirection: "column",
         backdropFilter: "blur(20px)",
         position: "relative", zIndex: 20,
+        transition: "all 0.3s ease",
       }}>
         {/* Workspace Brand Header */}
         <div style={{
@@ -806,7 +830,8 @@ export default function Home() {
       <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative", zIndex: 10 }}>
         {/* Top Header */}
         <header style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
+          display: zenMode ? "none" : "flex",
+          alignItems: "center", justifyContent: "space-between",
           padding: "0 28px", height: "56px", minHeight: "56px",
           background: "rgba(8,8,16,0.7)", borderBottom: "1px solid rgba(255,255,255,0.07)",
           backdropFilter: "blur(20px)", position: "sticky", top: 0, zIndex: 30,
@@ -1188,18 +1213,117 @@ export default function Home() {
                   boxShadow: "0 8px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06)",
                 }}>
                   <div style={{
-                    display: "flex", alignItems: "center", gap: "6px",
-                    padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.06)",
+                    display: "flex", alignItems: "center", gap: "8px",
+                    padding: "12px 18px", borderBottom: "1px solid rgba(255,255,255,0.06)",
                     background: "rgba(255,255,255,0.02)",
                   }}>
-                    <div style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#ff5f57" }} />
-                    <div style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#febc2e" }} />
-                    <div style={{ width: "11px", height: "11px", borderRadius: "50%", background: "#28c840" }} />
+                    {/* Interactive Traffic Light Buttons */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+                      {/* Red: Clear Content */}
+                      <button
+                        onClick={() => {
+                          if (confirm("Clear all content in this document?")) {
+                            editorRef.current?.clearContent();
+                            setToastMessage("Document content cleared");
+                            setTimeout(() => setToastMessage(null), 2500);
+                          }
+                        }}
+                        title="Clear Document Content (Red Dot)"
+                        style={{
+                          width: "12px", height: "12px", borderRadius: "50%",
+                          background: "#ff5f57", border: "none", cursor: "pointer",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          padding: 0, transition: "all 0.15s ease", outline: "none",
+                          boxShadow: "0 0 6px rgba(255,95,87,0.4)",
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLElement).style.transform = "scale(1.25)";
+                          (e.currentTarget as HTMLElement).style.boxShadow = "0 0 10px rgba(255,95,87,0.9)";
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLElement).style.transform = "scale(1)";
+                          (e.currentTarget as HTMLElement).style.boxShadow = "0 0 6px rgba(255,95,87,0.4)";
+                        }}
+                      />
+
+                      {/* Yellow / Orange: Zen Focus Mode */}
+                      <button
+                        onClick={() => {
+                          const next = !zenMode;
+                          setZenMode(next);
+                          setToastMessage(next ? "Zen Focus Mode Activated (Press Esc or click yellow dot to exit)" : "Zen Focus Mode Deactivated");
+                          setTimeout(() => setToastMessage(null), 3500);
+                        }}
+                        title={zenMode ? "Exit Zen Focus Mode (Yellow Dot)" : "Toggle Zen Focus Mode (Distraction-Free) (Yellow Dot)"}
+                        style={{
+                          width: "12px", height: "12px", borderRadius: "50%",
+                          background: "#febc2e", border: "none", cursor: "pointer",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          padding: 0, transition: "all 0.15s ease", outline: "none",
+                          boxShadow: zenMode ? "0 0 10px rgba(254,188,46,0.9)" : "0 0 6px rgba(254,188,46,0.4)",
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLElement).style.transform = "scale(1.25)";
+                          (e.currentTarget as HTMLElement).style.boxShadow = "0 0 10px rgba(254,188,46,0.9)";
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLElement).style.transform = "scale(1)";
+                          (e.currentTarget as HTMLElement).style.boxShadow = zenMode ? "0 0 10px rgba(254,188,46,0.9)" : "0 0 6px rgba(254,188,46,0.4)";
+                        }}
+                      />
+
+                      {/* Green: Fullscreen Toggle */}
+                      <button
+                        onClick={() => {
+                          if (!document.fullscreenElement) {
+                            document.documentElement.requestFullscreen().catch(() => {});
+                            setIsFullscreen(true);
+                          } else {
+                            document.exitFullscreen().catch(() => {});
+                            setIsFullscreen(false);
+                          }
+                        }}
+                        title={isFullscreen ? "Exit Browser Fullscreen (Green Dot)" : "Toggle Browser Fullscreen (Green Dot)"}
+                        style={{
+                          width: "12px", height: "12px", borderRadius: "50%",
+                          background: "#28c840", border: "none", cursor: "pointer",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          padding: 0, transition: "all 0.15s ease", outline: "none",
+                          boxShadow: isFullscreen ? "0 0 10px rgba(40,200,64,0.9)" : "0 0 6px rgba(40,200,64,0.4)",
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLElement).style.transform = "scale(1.25)";
+                          (e.currentTarget as HTMLElement).style.boxShadow = "0 0 10px rgba(40,200,64,0.9)";
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLElement).style.transform = "scale(1)";
+                          (e.currentTarget as HTMLElement).style.boxShadow = isFullscreen ? "0 0 10px rgba(40,200,64,0.9)" : "0 0 6px rgba(40,200,64,0.4)";
+                        }}
+                      />
+                    </div>
+
                     <div style={{ flex: 1, textAlign: "center" }}>
-                      <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.2)", fontWeight: "500" }}>
-                        syncflow · {activeDocId ? `doc:${activeDocId.slice(-6)}` : "isolated workspace"}
+                      <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.25)", fontWeight: "500" }}>
+                        syncflow · {activeDocId ? `doc:${activeDocId.slice(-6)}` : "isolated workspace"} {zenMode && "· [Zen Mode Active]"}
                       </span>
                     </div>
+
+                    {zenMode && (
+                      <button
+                        onClick={() => {
+                          setZenMode(false);
+                          setToastMessage("Zen Mode Deactivated");
+                          setTimeout(() => setToastMessage(null), 2000);
+                        }}
+                        style={{
+                          fontSize: "11px", color: "#febc2e", background: "rgba(254,188,46,0.12)",
+                          border: "1px solid rgba(254,188,46,0.3)", borderRadius: "6px",
+                          padding: "3px 8px", cursor: "pointer", fontWeight: "600",
+                        }}
+                      >
+                        Exit Zen (Esc)
+                      </button>
+                    )}
                   </div>
 
                   <div style={{ padding: "24px 32px 32px" }} className="editor-dark-wrapper">

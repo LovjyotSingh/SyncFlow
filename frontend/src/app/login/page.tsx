@@ -186,9 +186,22 @@ function LoginPageInner() {
           </form>
         </div>
 
-        <p style={{ textAlign: "center", marginTop: "20px", fontSize: "12px", color: "rgba(255,255,255,0.2)" }}>
+        <p style={{ textAlign: "center", marginTop: "16px", fontSize: "12px", color: "rgba(255,255,255,0.2)" }}>
           By continuing, you agree to SyncFlow's Terms of Service.
         </p>
+
+        {/* Copyright Footer */}
+        <div style={{
+          textAlign: "center", marginTop: "24px", paddingTop: "16px",
+          borderTop: "1px solid rgba(255,255,255,0.06)",
+        }}>
+          <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)", margin: 0 }}>
+            &copy; {new Date().getFullYear()} <strong style={{ color: "rgba(255,255,255,0.75)", fontWeight: "600" }}>Lovjyot Singh</strong>. All rights reserved.
+          </p>
+          <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.2)", marginTop: "4px" }}>
+            SyncFlow &bull; Real-Time Collaborative Workspace
+          </p>
+        </div>
       </div>
 
       <style jsx global>{`

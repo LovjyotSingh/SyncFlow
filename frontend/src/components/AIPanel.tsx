@@ -516,8 +516,8 @@ export default function AIPanel({ getEditorContent, isOpen, onClose, onInsertCon
                   : <LucideSend style={{ width: "13px", height: "13px", color: "white" }} />}
               </button>
             </div>
-            <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.25)", marginTop: "6px", textAlign: "center" }}>
-              Powered by Gemini 3.7 Flash · Insert directly into document
+            <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)", marginTop: "6px", textAlign: "center" }}>
+              Powered by Gemini 3.5 Flash-Lite &bull; &copy; {new Date().getFullYear()} Lovjyot Singh
             </div>
           </div>
         </div>

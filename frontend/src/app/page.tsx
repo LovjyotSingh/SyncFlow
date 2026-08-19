@@ -791,6 +791,14 @@ export default function Home() {
               </button>
             </div>
           )}
+
+          {/* Sidebar copyright */}
+          <div style={{
+            marginTop: "10px", paddingTop: "8px", borderTop: "1px solid rgba(255,255,255,0.05)",
+            textAlign: "center", fontSize: "10px", color: "rgba(255,255,255,0.3)",
+          }}>
+            &copy; {new Date().getFullYear()} <span style={{ color: "rgba(255,255,255,0.6)", fontWeight: "600" }}>Lovjyot Singh</span>
+          </div>
         </div>
       </aside>
 
@@ -1232,6 +1240,30 @@ export default function Home() {
                   </div>
                 </div>
               </div>
+
+              {/* Main Document Copyright Footer */}
+              <div style={{
+                marginTop: "48px", paddingTop: "20px",
+                borderTop: "1px solid rgba(255,255,255,0.06)",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                flexWrap: "wrap", gap: "12px",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{
+                    width: "22px", height: "22px", borderRadius: "6px",
+                    background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: "10px", fontWeight: "800", color: "white",
+                    boxShadow: "0 0 10px rgba(99,102,241,0.3)",
+                  }}>SF</div>
+                  <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.45)", fontWeight: "500" }}>
+                    SyncFlow &bull; Real-Time Collaborative Workspace
+                  </span>
+                </div>
+                <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)" }}>
+                  &copy; {new Date().getFullYear()} <strong style={{ color: "rgba(255,255,255,0.8)", fontWeight: "600" }}>Lovjyot Singh</strong>. All rights reserved.
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1462,10 +1494,13 @@ export default function Home() {
               )}
             </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "12px", paddingTop: "12px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+              <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)" }}>
+                &copy; {new Date().getFullYear()} Lovjyot Singh
+              </span>
               <button
                 onClick={() => setShareModalOpen(false)}
-                style={{ padding: "9px 20px", borderRadius: "9px", background: "rgba(255,255,255,0.08)", border: "none", color: "rgba(255,255,255,0.8)", fontSize: "13px", cursor: "pointer" }}
+                style={{ padding: "8px 18px", borderRadius: "8px", background: "rgba(255,255,255,0.08)", border: "none", color: "rgba(255,255,255,0.8)", fontSize: "12px", fontWeight: "500", cursor: "pointer" }}
               >
                 Done
               </button>

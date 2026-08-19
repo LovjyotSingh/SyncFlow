@@ -235,6 +235,30 @@ export default function SharedDocPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Document Copyright Footer */}
+              <div style={{
+                marginTop: "48px", paddingTop: "20px",
+                borderTop: "1px solid rgba(255,255,255,0.06)",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                flexWrap: "wrap", gap: "12px",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{
+                    width: "22px", height: "22px", borderRadius: "6px",
+                    background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: "10px", fontWeight: "800", color: "white",
+                    boxShadow: "0 0 10px rgba(99,102,241,0.3)",
+                  }}>SF</div>
+                  <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.45)", fontWeight: "500" }}>
+                    SyncFlow &bull; Real-Time Collaborative Workspace
+                  </span>
+                </div>
+                <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)" }}>
+                  &copy; {new Date().getFullYear()} <strong style={{ color: "rgba(255,255,255,0.8)", fontWeight: "600" }}>Lovjyot Singh</strong>. All rights reserved.
+                </div>
+              </div>
             </div>
           </div>
 

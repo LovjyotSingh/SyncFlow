@@ -3,8 +3,15 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const router = Router();
 
-// Model: Gemini 3.7 Flash — Google's latest workhorse model (released Aug 2026)
-const GEMINI_MODEL = 'gemini-3.7-flash';
+// Primary and fallback models in order of priority
+const CANDIDATE_MODELS = [
+  process.env.GEMINI_MODEL,
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-8b',
+  'gemini-1.5-pro',
+].filter(Boolean) as string[];
 
 const COMMANDS: Record<string, string> = {
   summarize: `You are an expert document analyst. Summarize the following document into 3-5 concise, insightful bullet points. 
@@ -32,6 +39,60 @@ Replace jargon, complex terms, and long sentences with simple equivalents. Outpu
 Format as a checklist with [ ] prefix for each item. Group by owner if mentioned. Output only the action items checklist.`,
 };
 
+function formatErrorMessage(error: any): string {
+  const msg = error?.message || '';
+  if (msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')) {
+    return 'Invalid Gemini API key. Please check your key at aistudio.google.com';
+  }
+  if (msg.includes('503') || msg.includes('high demand') || msg.includes('Service Unavailable')) {
+    return 'Google Gemini servers are currently experiencing high demand. Please try again in a few seconds.';
+  }
+  if (msg.includes('quota') || msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
+    return 'API rate limit or quota reached. Please try again in a moment or add your own free Gemini API key.';
+  }
+  return msg || 'AI request failed';
+}
+
+async function executeWithModelFallback<T>(
+  genAI: GoogleGenerativeAI,
+  systemInstruction: string,
+  fn: (model: any, modelName: string) => Promise<T>
+): Promise<T> {
+  const uniqueModels = Array.from(new Set(CANDIDATE_MODELS));
+  let lastError: any = null;
+
+  for (const modelName of uniqueModels) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction,
+      });
+      return await fn(model, modelName);
+    } catch (err: any) {
+      lastError = err;
+      const isRecoverable =
+        err.status === 503 ||
+        err.status === 404 ||
+        err.status === 429 ||
+        err.message?.includes('503') ||
+        err.message?.includes('high demand') ||
+        err.message?.includes('404') ||
+        err.message?.includes('not found') ||
+        err.message?.includes('429') ||
+        err.message?.includes('quota') ||
+        err.message?.includes('overloaded');
+
+      if (isRecoverable) {
+        console.warn(`⚠️ Model "${modelName}" unavailable (${err.message?.slice(0, 100)}). Trying next candidate model...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw lastError;
+}
+
 // POST /api/ai — Standard (non-streaming) for simple use
 router.post('/ai', async (req, res) => {
   try {
@@ -54,23 +115,19 @@ router.post('/ai', async (req, res) => {
     }
 
     const genAI = new GoogleGenerativeAI(key);
-    const model = genAI.getGenerativeModel({
-      model: GEMINI_MODEL,
-      systemInstruction: 'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
-    });
+    const result = await executeWithModelFallback(
+      genAI,
+      'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
+      async (model, modelName) => {
+        const response = await model.generateContent(`${systemPrompt}\n\n---\n\n${content}`);
+        return { text: response.response.text(), model: modelName };
+      }
+    );
 
-    const result = await model.generateContent(`${systemPrompt}\n\n---\n\n${content}`);
-    const text = result.response.text();
-
-    res.json({ result: text, model: GEMINI_MODEL });
+    res.json({ result: result.text, model: result.model });
   } catch (error: any) {
     console.error('Gemini AI error:', error.message);
-    const msg = error.message?.includes('API_KEY_INVALID')
-      ? 'Invalid Gemini API key. Get a free one at aistudio.google.com'
-      : error.message?.includes('quota')
-      ? 'API quota exceeded. Try again later or upgrade your Gemini plan.'
-      : error.message || 'AI request failed';
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: formatErrorMessage(error) });
   }
 });
 
@@ -104,12 +161,13 @@ router.post('/ai/stream', async (req, res) => {
     res.flushHeaders();
 
     const genAI = new GoogleGenerativeAI(key);
-    const model = genAI.getGenerativeModel({
-      model: GEMINI_MODEL,
-      systemInstruction: 'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
-    });
-
-    const streamResult = await model.generateContentStream(`${systemPrompt}\n\n---\n\n${content}`);
+    const streamResult = await executeWithModelFallback(
+      genAI,
+      'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
+      async (model) => {
+        return await model.generateContentStream(`${systemPrompt}\n\n---\n\n${content}`);
+      }
+    );
 
     for await (const chunk of streamResult.stream) {
       const text = chunk.text();
@@ -122,7 +180,7 @@ router.post('/ai/stream', async (req, res) => {
     res.end();
   } catch (error: any) {
     console.error('Gemini stream error:', error.message);
-    res.write(`data: ${JSON.stringify({ error: error.message || 'Stream failed' })}\n\n`);
+    res.write(`data: ${JSON.stringify({ error: formatErrorMessage(error) })}\n\n`);
     res.end();
   }
 });
@@ -151,14 +209,11 @@ router.post('/ai/chat/stream', async (req, res) => {
     res.flushHeaders();
 
     const genAI = new GoogleGenerativeAI(key);
-    const model = genAI.getGenerativeModel({
-      model: GEMINI_MODEL,
-      systemInstruction:
-        'You are SyncFlow AI — a brilliant, versatile assistant embedded in a collaborative document editor. ' +
-        'You can write and explain code in any language, answer technical questions, write essays, ' +
-        'summarize topics, generate content, and help with anything the user asks. ' +
-        'Be concise but thorough. Use markdown formatting (code blocks, headers, bullet points) where it improves clarity.',
-    });
+    const systemInstruction =
+      'You are SyncFlow AI — a brilliant, versatile assistant embedded in a collaborative document editor. ' +
+      'You can write and explain code in any language, answer technical questions, write essays, ' +
+      'summarize topics, generate content, and help with anything the user asks. ' +
+      'Be concise but thorough. Use markdown formatting (code blocks, headers, bullet points) where it improves clarity.';
 
     // Build conversation history for multi-turn context
     const chatHistory = (history as { role: string; text: string }[]).map((msg) => ({
@@ -166,8 +221,14 @@ router.post('/ai/chat/stream', async (req, res) => {
       parts: [{ text: msg.text }],
     }));
 
-    const chat = model.startChat({ history: chatHistory });
-    const streamResult = await chat.sendMessageStream(message);
+    const streamResult = await executeWithModelFallback(
+      genAI,
+      systemInstruction,
+      async (model) => {
+        const chat = model.startChat({ history: chatHistory });
+        return await chat.sendMessageStream(message);
+      }
+    );
 
     for await (const chunk of streamResult.stream) {
       const text = chunk.text();
@@ -180,7 +241,7 @@ router.post('/ai/chat/stream', async (req, res) => {
     res.end();
   } catch (error: any) {
     console.error('Gemini chat error:', error.message);
-    res.write(`data: ${JSON.stringify({ error: error.message || 'Chat stream failed' })}\n\n`);
+    res.write(`data: ${JSON.stringify({ error: formatErrorMessage(error) })}\n\n`);
     res.end();
   }
 });

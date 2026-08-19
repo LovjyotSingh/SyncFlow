@@ -57,6 +57,7 @@ if (process.env.REDIS_URL) {
 app.use('/api/auth', authRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api', aiRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Initialize Socket.io for real-time syncing
 const io = new Server(server, {

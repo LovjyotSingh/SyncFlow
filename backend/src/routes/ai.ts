@@ -46,8 +46,18 @@ function formatErrorMessage(error: any): string {
   return msg || 'AI request failed';
 }
 
-// POST /api/ai — Standard (non-streaming)
-router.post('/ai', async (req, res) => {
+// GET health check for AI routes
+router.get(['/ai', '/ai/health', '/health'], (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'SyncFlow AI Service',
+    model: GEMINI_MODEL,
+    keyConfigured: !!process.env.GEMINI_API_KEY,
+  });
+});
+
+// POST standard (non-streaming)
+router.post(['/ai', '/'], async (req, res) => {
   try {
     const { command, content, prompt: customPrompt } = req.body;
 
@@ -83,8 +93,8 @@ router.post('/ai', async (req, res) => {
   }
 });
 
-// POST /api/ai/stream — Streaming (Server-Sent Events) for real-time output
-router.post('/api/ai/stream', async (req, res) => {
+// POST streaming (Server-Sent Events)
+router.post(['/ai/stream', '/stream'], async (req, res) => {
   try {
     const { command, content, prompt: customPrompt } = req.body;
 
@@ -137,8 +147,8 @@ router.post('/api/ai/stream', async (req, res) => {
   }
 });
 
-// POST /api/ai/chat/stream — Free-form conversational AI with gemini-3.7-flash
-router.post('/api/ai/chat/stream', async (req, res) => {
+// POST free-form conversational AI stream
+router.post(['/ai/chat/stream', '/chat/stream'], async (req, res) => {
   try {
     const { message, history = [] } = req.body;
 

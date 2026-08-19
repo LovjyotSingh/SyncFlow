@@ -3,14 +3,8 @@ import { GoogleGenAI } from '@google/genai';
 
 const router = Router();
 
-// Primary is gemini-3.7-flash, with automatic fallback during high demand spikes
-const CANDIDATE_MODELS = [
-  process.env.GEMINI_MODEL,
-  'gemini-3.7-flash',
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash',
-].filter(Boolean) as string[];
+// One and only model: Gemini 3.5 Flash-Lite
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 
 const COMMANDS: Record<string, string> = {
   summarize: `You are an expert document analyst. Summarize the following document into 3-5 concise, insightful bullet points. 
@@ -44,7 +38,7 @@ function formatErrorMessage(error: any): string {
     return 'Invalid Gemini API key. Please check GEMINI_API_KEY in backend .env';
   }
   if (msg.includes('503') || msg.includes('high demand') || msg.includes('Service Unavailable')) {
-    return 'Google Gemini servers are currently experiencing global high demand. Please retry in a few seconds.';
+    return 'Gemini 3.5 Flash-Lite servers are experiencing high demand. Please retry in a few seconds.';
   }
   if (msg.includes('quota') || msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
     return 'API rate limit reached. Please wait a moment before trying again.';
@@ -56,49 +50,33 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function executeWithRetryAndFallback<T>(
-  ai: GoogleGenAI,
-  fn: (modelName: string) => Promise<T>
-): Promise<{ result: T; modelName: string }> {
-  const models = Array.from(new Set(CANDIDATE_MODELS));
-  let lastError: any = null;
+async function executeWithRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
+  let lastError: any;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      if (attempt > 0) {
+        await sleep(1000 * Math.pow(2, attempt - 1));
+      }
+      return await fn();
+    } catch (err: any) {
+      lastError = err;
+      const msg = (err.message || '').toLowerCase();
+      const status = err.status || err.statusCode;
+      const isRetriable =
+        status === 503 ||
+        status === 429 ||
+        msg.includes('503') ||
+        msg.includes('429') ||
+        msg.includes('high demand') ||
+        msg.includes('service unavailable') ||
+        msg.includes('resource exhausted');
 
-  for (const modelName of models) {
-    const maxAttempts = modelName === 'gemini-3.7-flash' ? 2 : 1;
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      try {
-        if (attempt > 0) {
-          console.log(`[AI] Retrying "${modelName}" after backoff...`);
-          await sleep(1000 * attempt);
-        }
-        const result = await fn(modelName);
-        return { result, modelName };
-      } catch (err: any) {
-        lastError = err;
-        const msg = (err.message || '').toLowerCase();
-        const status = err.status || err.statusCode;
-        const isCapacityError =
-          status === 503 ||
-          status === 429 ||
-          status === 404 ||
-          msg.includes('503') ||
-          msg.includes('429') ||
-          msg.includes('404') ||
-          msg.includes('high demand') ||
-          msg.includes('service unavailable') ||
-          msg.includes('quota') ||
-          msg.includes('resource exhausted') ||
-          msg.includes('overloaded');
-
-        if (isCapacityError) {
-          console.warn(`⚠️ Model "${modelName}" capacity error (${err.message?.slice(0, 80)}). Trying fallback...`);
-          continue;
-        }
+      if (!isRetriable || attempt === maxRetries) {
         throw err;
       }
+      console.warn(`[AI] Retrying gemini-3.5-flash-lite (attempt ${attempt + 1}/${maxRetries})...`);
     }
   }
-
   throw lastError;
 }
 
@@ -107,8 +85,7 @@ router.get(['/ai', '/ai/health', '/health'], (req, res) => {
   res.json({
     status: 'ok',
     service: 'SyncFlow AI Service',
-    primaryModel: 'gemini-3.7-flash',
-    fallbackModels: CANDIDATE_MODELS.slice(1),
+    model: GEMINI_MODEL,
     keyConfigured: !!process.env.GEMINI_API_KEY,
   });
 });
@@ -135,9 +112,9 @@ router.post(['/ai', '/'], async (req, res) => {
     }
 
     const ai = new GoogleGenAI({ apiKey: key });
-    const { result, modelName } = await executeWithRetryAndFallback(ai, async (model) => {
+    const text = await executeWithRetry(async () => {
       const response = await ai.models.generateContent({
-        model,
+        model: GEMINI_MODEL,
         contents: `${systemPrompt}\n\n---\n\n${content}`,
         config: {
           systemInstruction: 'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
@@ -146,7 +123,7 @@ router.post(['/ai', '/'], async (req, res) => {
       return response.text || '';
     });
 
-    res.json({ result, model: modelName });
+    res.json({ result: text, model: GEMINI_MODEL });
   } catch (error: any) {
     console.error('Gemini AI error:', error.message);
     res.status(500).json({ error: formatErrorMessage(error) });
@@ -183,9 +160,9 @@ router.post(['/ai/stream', '/stream'], async (req, res) => {
     res.flushHeaders();
 
     const ai = new GoogleGenAI({ apiKey: key });
-    const { result: streamResult } = await executeWithRetryAndFallback(ai, async (model) => {
+    const streamResult = await executeWithRetry(async () => {
       return await ai.models.generateContentStream({
-        model,
+        model: GEMINI_MODEL,
         contents: `${systemPrompt}\n\n---\n\n${content}`,
         config: {
           systemInstruction: 'You are SyncFlow AI, an intelligent writing assistant built into a collaborative document editor. Be concise, accurate, and helpful.',
@@ -245,9 +222,9 @@ router.post(['/ai/chat/stream', '/chat/stream'], async (req, res) => {
     }));
     contents.push({ role: 'user', parts: [{ text: message }] });
 
-    const { result: streamResult } = await executeWithRetryAndFallback(ai, async (model) => {
+    const streamResult = await executeWithRetry(async () => {
       return await ai.models.generateContentStream({
-        model,
+        model: GEMINI_MODEL,
         contents,
         config: {
           systemInstruction,

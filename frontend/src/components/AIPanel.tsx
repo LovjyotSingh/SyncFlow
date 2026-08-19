@@ -252,7 +252,7 @@ export default function AIPanel({ getEditorContent, isOpen, onClose, onInsertCon
             fontSize: "9px", padding: "2px 6px", borderRadius: "4px",
             background: "rgba(99,102,241,0.2)", color: "rgba(99,102,241,0.9)",
             border: "1px solid rgba(99,102,241,0.3)", fontWeight: "700", letterSpacing: "0.3px",
-          }}>GEMINI 3.7 FLASH</span>
+          }}>GEMINI 3.5 FLASH-LITE</span>
         </div>
         <button onClick={onClose} style={{
           background: "none", border: "none", cursor: "pointer",

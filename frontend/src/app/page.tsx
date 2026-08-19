@@ -89,7 +89,8 @@ export default function Home() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        const data: DocumentItem[] = await res.json();
+        const text = await res.text();
+        const data: DocumentItem[] = text && text.trim().startsWith("[") ? JSON.parse(text) : [];
         if (data.length > 0) {
           setDocuments(data);
           setActiveDocId((prev) => prev || data[0]._id);
@@ -102,10 +103,13 @@ export default function Home() {
             body: JSON.stringify({ title: "Welcome to SyncFlow" }),
           });
           if (createRes.ok) {
-            const newDoc = await createRes.json();
-            setDocuments([newDoc]);
-            setActiveDocId(newDoc._id);
-            setDocTitle(newDoc.title);
+            const createText = await createRes.text();
+            if (createText && createText.trim().startsWith("{")) {
+              const newDoc = JSON.parse(createText);
+              setDocuments([newDoc]);
+              setActiveDocId(newDoc._id);
+              setDocTitle(newDoc.title);
+            }
           }
         }
       }
@@ -156,10 +160,13 @@ export default function Home() {
         body: JSON.stringify({ title: "Untitled Workspace" }),
       });
       if (res.ok) {
-        const newDoc: DocumentItem = await res.json();
-        setDocuments((prev) => [newDoc, ...prev]);
-        setActiveDocId(newDoc._id);
-        setDocTitle(newDoc.title);
+        const text = await res.text();
+        if (text && text.trim().startsWith("{")) {
+          const newDoc: DocumentItem = JSON.parse(text);
+          setDocuments((prev) => [newDoc, ...prev]);
+          setActiveDocId(newDoc._id);
+          setDocTitle(newDoc.title);
+        }
       }
     } catch (err) {
       console.error("Error creating document:", err);
@@ -240,7 +247,8 @@ export default function Home() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ email: inviteEmail.trim() }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      const data = text && text.trim().startsWith("{") ? JSON.parse(text) : {};
       if (res.ok) {
         setInviteSuccess(data.message || "Invite sent!");
         setInviteEmail("");
@@ -248,8 +256,12 @@ export default function Home() {
         fetch(`${BACKEND_URL}/api/documents/${activeDocId}/collaborators`, {
           headers: { Authorization: `Bearer ${token}` },
         })
-          .then((r) => (r.ok ? r.json() : {}))
-          .then((d) => setCollaboratorsList(d));
+          .then((r) => r.text())
+          .then((t) => (t && t.trim().startsWith("{") ? JSON.parse(t) : {}))
+          .then((d) => setCollaboratorsList(d))
+          .catch(() => {});
+      } else {
+        setInviteSuccess(data.message || "Failed to send invite");
       }
     } catch {
       setInviteSuccess("Failed to send invite");
@@ -294,14 +306,33 @@ export default function Home() {
         setJoining(false);
         return;
       }
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        setJoinError(errData.message || "Failed to join workspace.");
+      if (res.status === 502 || res.status === 503 || res.status === 504) {
+        setJoinError("Backend server is waking up. Please retry in a few seconds.");
         setJoining(false);
         return;
       }
 
-      const joinedDoc: DocumentItem = await res.json();
+      const text = await res.text();
+      if (!res.ok) {
+        let errMsg = "Failed to join workspace.";
+        try {
+          if (text.trim().startsWith("{")) {
+            const errData = JSON.parse(text);
+            errMsg = errData.message || errMsg;
+          }
+        } catch {}
+        setJoinError(errMsg);
+        setJoining(false);
+        return;
+      }
+
+      if (!text || !text.trim().startsWith("{")) {
+        setJoinError("Invalid server response. Please try again.");
+        setJoining(false);
+        return;
+      }
+
+      const joinedDoc: DocumentItem = JSON.parse(text);
 
       setDocuments((prev) => {
         const exists = prev.some((d) => d._id === joinedDoc._id);

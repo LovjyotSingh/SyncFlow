@@ -74,8 +74,19 @@ export default function AIPanel({ getEditorContent, isOpen, onClose, onInsertCon
     });
 
     if (!res.ok) {
-      const data = await res.json();
-      onError(data.error || "Request failed");
+      let errorMsg = `Request failed (${res.status})`;
+      try {
+        const text = await res.text();
+        if (text.trim().startsWith("{")) {
+          const data = JSON.parse(text);
+          errorMsg = data.error || data.message || errorMsg;
+        } else if (res.status === 502 || res.status === 503 || res.status === 504) {
+          errorMsg = "Backend server is waking up (Render cold start). Please try again in 20-30 seconds.";
+        } else if (res.status === 404) {
+          errorMsg = `AI endpoint not found (404). Please verify backend deployment.`;
+        }
+      } catch {}
+      onError(errorMsg);
       return;
     }
 

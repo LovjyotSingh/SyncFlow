@@ -44,7 +44,12 @@ export default function SharedDocPage() {
         if (res.status === 403) { setStatus("denied"); return; }
         if (!res.ok) { setStatus("denied"); return; }
 
-        const doc = await res.json();
+        const text = await res.text();
+        if (!text || !text.trim().startsWith("{")) {
+          setStatus("denied");
+          return;
+        }
+        const doc = JSON.parse(text);
         setDocId(doc._id);
         setDocTitle(doc.title || "Shared Workspace");
         setStatus("authorized");

@@ -1,6 +1,6 @@
 // Client-side auth utilities
 
-export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+export const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000').replace(/\/+$/, '');
 
 export interface AuthUser {
   id: string;
@@ -38,13 +38,43 @@ export function isLoggedIn(): boolean {
   return !!getToken() && !!getUser();
 }
 
+async function parseResponseJson(res: Response, fallbackAction = 'Request'): Promise<any> {
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    try {
+      return await res.json();
+    } catch {}
+  }
+  const text = await res.text().catch(() => '');
+  if (text && text.trim().startsWith('{')) {
+    try {
+      return JSON.parse(text);
+    } catch {}
+  }
+  if (res.status === 502 || res.status === 503 || res.status === 504) {
+    throw new Error('Backend server is waking up (Render cold start). Please retry in 20-30 seconds.');
+  }
+  if (res.status === 404) {
+    throw new Error(`API endpoint not found (404). Please verify NEXT_PUBLIC_BACKEND_URL (${BACKEND_URL}).`);
+  }
+  if (!res.ok) {
+    throw new Error(`${fallbackAction} failed (Status ${res.status})`);
+  }
+  return {};
+}
+
 export async function login(email: string, password: string): Promise<AuthUser> {
-  const res = await fetch(`${BACKEND_URL}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  const data = await res.json();
+  let res: Response;
+  try {
+    res = await fetch(`${BACKEND_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+  } catch {
+    throw new Error(`Cannot connect to backend (${BACKEND_URL}). Please verify your backend server is live.`);
+  }
+  const data = await parseResponseJson(res, 'Login');
   if (!res.ok) throw new Error(data.message || 'Login failed');
   setToken(data.token);
   setUser(data.user);
@@ -52,12 +82,17 @@ export async function login(email: string, password: string): Promise<AuthUser> 
 }
 
 export async function register(name: string, email: string, password: string): Promise<AuthUser> {
-  const res = await fetch(`${BACKEND_URL}/api/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, email, password }),
-  });
-  const data = await res.json();
+  let res: Response;
+  try {
+    res = await fetch(`${BACKEND_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password }),
+    });
+  } catch {
+    throw new Error(`Cannot connect to backend (${BACKEND_URL}). Please verify your backend server is live.`);
+  }
+  const data = await parseResponseJson(res, 'Registration');
   if (!res.ok) throw new Error(data.message || 'Registration failed');
   setToken(data.token);
   setUser(data.user);

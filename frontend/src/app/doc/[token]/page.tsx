@@ -3,7 +3,11 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { isLoggedIn, getToken, BACKEND_URL } from "@/lib/auth";
-import { LucideLoader2, LucideShieldX, LucideSparkles, LucideChevronRight, LucideLogOut } from "lucide-react";
+import {
+  LucideLoader2, LucideShieldX, LucideSparkles, LucideChevronRight,
+  LucideLogOut, LucideDownload, LucideFileText, LucideFile, LucideFileCode,
+  LucidePrinter, LucideChevronDown
+} from "lucide-react";
 import dynamic from "next/dynamic";
 import type { Presence, EditorHandle } from "@/components/Editor";
 import AIPanel from "@/components/AIPanel";
@@ -21,6 +25,7 @@ export default function SharedDocPage() {
   const [presence, setPresence] = useState<Presence[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const [zenMode, setZenMode] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -45,6 +50,57 @@ export default function SharedDocPage() {
 
   const handlePresenceChange = useCallback((users: Presence[]) => setPresence(users), []);
   const handleConnectionChange = useCallback((connected: boolean) => setIsConnected(connected), []);
+
+  const downloadAsMarkdown = () => {
+    const text = editorRef.current?.getText() || "";
+    const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(docTitle || "document").replace(/[/\\?%*:|"<>]/g, "-")}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadAsPlainText = () => {
+    const text = editorRef.current?.getText() || "";
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(docTitle || "document").replace(/[/\\?%*:|"<>]/g, "-")}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadAsHtml = () => {
+    const text = editorRef.current?.getText() || "";
+    const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${docTitle || "SyncFlow Document"}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #080810; color: rgba(255,255,255,0.9); max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.6; }
+    h1 { color: white; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px; margin-bottom: 24px; }
+    pre { background: rgba(255,255,255,0.05); padding: 16px; border-radius: 8px; white-space: pre-wrap; }
+    footer { margin-top: 50px; font-size: 12px; color: rgba(255,255,255,0.4); text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>${docTitle || "Untitled Document"}</h1>
+  <pre>${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>
+  <footer>Exported from SyncFlow &bull; Created by Lovjyot Singh</footer>
+</body>
+</html>`;
+    const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(docTitle || "document").replace(/[/\\?%*:|"<>]/g, "-")}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const handleLeave = async () => {
     if (!confirm(`Are you sure you want to exit collaboration on "${docTitle}"?`)) return;
@@ -191,6 +247,93 @@ export default function SharedDocPage() {
               <LucideSparkles style={{ width: "13px", height: "13px" }} />
               Gemini AI
             </button>
+
+            {/* Download Dropdown */}
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => setDownloadMenuOpen(!downloadMenuOpen)}
+                style={{
+                  display: "flex", alignItems: "center", gap: "5px", padding: "7px 12px", borderRadius: "8px",
+                  background: downloadMenuOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.07)",
+                  border: downloadMenuOpen ? "1px solid rgba(99,102,241,0.4)" : "1px solid rgba(255,255,255,0.1)",
+                  color: "rgba(255,255,255,0.85)", fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                <LucideDownload style={{ width: "13px", height: "13px", color: "#34d399" }} />
+                <span>Download</span>
+                <LucideChevronDown style={{ width: "12px", height: "12px", opacity: 0.6 }} />
+              </button>
+
+              {downloadMenuOpen && (
+                <div style={{
+                  position: "absolute", right: 0, top: "40px", width: "200px",
+                  background: "rgba(20,20,35,0.98)", border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: "12px", padding: "6px", zIndex: 100,
+                  boxShadow: "0 16px 40px rgba(0,0,0,0.6)", backdropFilter: "blur(20px)",
+                }}>
+                  <button
+                    onClick={() => { downloadAsMarkdown(); setDownloadMenuOpen(false); }}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  >
+                    <LucideFileText style={{ width: "13px", height: "13px", color: "#818cf8" }} />
+                    <span>Markdown (.md)</span>
+                  </button>
+
+                  <button
+                    onClick={() => { downloadAsPlainText(); setDownloadMenuOpen(false); }}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  >
+                    <LucideFile style={{ width: "13px", height: "13px", color: "#94a3b8" }} />
+                    <span>Plain Text (.txt)</span>
+                  </button>
+
+                  <button
+                    onClick={() => { downloadAsHtml(); setDownloadMenuOpen(false); }}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  >
+                    <LucideFileCode style={{ width: "13px", height: "13px", color: "#38bdf8" }} />
+                    <span>Web Page (.html)</span>
+                  </button>
+
+                  <button
+                    onClick={() => { window.print(); setDownloadMenuOpen(false); }}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  >
+                    <LucidePrinter style={{ width: "13px", height: "13px", color: "#f59e0b" }} />
+                    <span>Print / Save as PDF</span>
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Exit Collaboration Button */}
             <button

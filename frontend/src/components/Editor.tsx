@@ -15,6 +15,7 @@ export type Presence = { socketId?: string; userId?: string; name: string; color
 export interface EditorHandle {
   getText: () => string;
   insertContent: (text: string) => void;
+  setContent: (text: string) => void;
   clearContent: () => void;
   kickUser: (target: { targetSocketId?: string; targetUserId?: string; targetName?: string }) => void;
 }
@@ -103,6 +104,22 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
         if (socket && isConnected) {
           socket.emit("send-changes", documentId, editor.document);
         }
+      }
+    },
+    setContent: async (text: string) => {
+      if (isKickedRef.current) return;
+      try {
+        const blocks = await editor.tryParseMarkdownToBlocks(text);
+        if (blocks && blocks.length > 0) {
+          editor.replaceBlocks(editor.document, blocks);
+        } else {
+          editor.replaceBlocks(editor.document, [{ type: "paragraph", content: text }]);
+        }
+      } catch {
+        editor.replaceBlocks(editor.document, [{ type: "paragraph", content: text }]);
+      }
+      if (socket && isConnected) {
+        socket.emit("send-changes", documentId, editor.document);
       }
     },
     clearContent: () => {

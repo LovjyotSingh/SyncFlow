@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import JSZip from "jszip";
 import {
   LucideSearch, LucideUsers,
   LucideSparkles, LucideChevronRight, LucidePlus,
@@ -10,6 +11,8 @@ import {
   LucideLogOut, LucideCheck, LucideTrash2, LucideDownload,
   LucideFileText, LucideUserPlus, LucideRotateCcw, LucideShield,
   LucideUserMinus, LucideUserX, LucideRefreshCw, LucideLock,
+  LucideFolder, LucideFolderPlus, LucideUpload, LucidePrinter,
+  LucideArchive, LucideFile, LucideChevronDown, LucideFileCode,
 } from "lucide-react";
 import type { Presence, EditorHandle } from "@/components/Editor";
 import AIPanel from "@/components/AIPanel";
@@ -55,12 +58,18 @@ export default function Home() {
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [joinModalOpen, setJoinModalOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [openMenuOpen, setOpenMenuOpen] = useState(false);
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [presenceMenuOpen, setPresenceMenuOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [zenMode, setZenMode] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -555,6 +564,177 @@ export default function Home() {
     }
   };
 
+  // ── Import / Export (Files & Folders) ───────────────────────────────────────
+  const processImportedFiles = async (files: File[]) => {
+    if (!files || files.length === 0) return;
+    const token = getToken();
+    if (!token) return;
+
+    let importedCount = 0;
+    let lastCreatedDocId: string | null = null;
+    let lastCreatedDocTitle: string | null = null;
+    let lastCreatedContent: string | null = null;
+
+    for (const file of files) {
+      if (file.name.startsWith(".") || file.name === "Thumbs.db" || file.name === "desktop.ini") continue;
+      
+      try {
+        const text = await file.text();
+        const cleanTitle = (file.webkitRelativePath || file.name).replace(/^\/+/, "");
+
+        const res = await fetch(`${BACKEND_URL}/api/documents`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ title: cleanTitle }),
+        });
+
+        if (res.ok) {
+          const newDoc: DocumentItem = await res.json();
+          importedCount++;
+          lastCreatedDocId = newDoc._id;
+          lastCreatedDocTitle = newDoc.title;
+          lastCreatedContent = text;
+        }
+      } catch (err) {
+        console.error("Error importing file:", file.name, err);
+      }
+    }
+
+    if (importedCount > 0) {
+      await fetchDocuments();
+      if (lastCreatedDocId) {
+        setActiveDocId(lastCreatedDocId);
+        if (lastCreatedDocTitle) setDocTitle(lastCreatedDocTitle);
+        if (lastCreatedContent) {
+          setTimeout(() => {
+            editorRef.current?.setContent(lastCreatedContent!);
+          }, 300);
+        }
+      }
+      setToastMessage(`Imported ${importedCount} file${importedCount !== 1 ? "s" : ""} into workspace`);
+      setTimeout(() => setToastMessage(null), 3500);
+    }
+  };
+
+  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      await processImportedFiles(Array.from(e.target.files));
+      e.target.value = "";
+    }
+  };
+
+  const handleFolderInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      await processImportedFiles(Array.from(e.target.files));
+      e.target.value = "";
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      await processImportedFiles(Array.from(e.dataTransfer.files));
+    }
+  };
+
+  const downloadAsMarkdown = () => {
+    const text = editorRef.current?.getText() || "";
+    const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(docTitle || "document").replace(/[/\\?%*:|"<>]/g, "-")}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setToastMessage(`Downloaded "${docTitle || "document"}.md"`);
+    setTimeout(() => setToastMessage(null), 2500);
+  };
+
+  const downloadAsPlainText = () => {
+    const text = editorRef.current?.getText() || "";
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(docTitle || "document").replace(/[/\\?%*:|"<>]/g, "-")}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setToastMessage(`Downloaded "${docTitle || "document"}.txt"`);
+    setTimeout(() => setToastMessage(null), 2500);
+  };
+
+  const downloadAsHtml = () => {
+    const text = editorRef.current?.getText() || "";
+    const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${docTitle || "SyncFlow Document"}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #080810; color: rgba(255,255,255,0.9); max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.6; }
+    h1 { color: white; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px; margin-bottom: 24px; font-size: 28px; }
+    pre { background: rgba(255,255,255,0.05); padding: 16px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; }
+    footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 12px; color: rgba(255,255,255,0.4); text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>${docTitle || "Untitled Document"}</h1>
+  <pre>${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>
+  <footer>Exported from SyncFlow &bull; Created by Lovjyot Singh</footer>
+</body>
+</html>`;
+    const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(docTitle || "document").replace(/[/\\?%*:|"<>]/g, "-")}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setToastMessage(`Downloaded "${docTitle || "document"}.html"`);
+    setTimeout(() => setToastMessage(null), 2500);
+  };
+
+  const downloadWorkspaceZip = async () => {
+    try {
+      setToastMessage("Generating workspace ZIP archive...");
+      const zip = new JSZip();
+      const currentText = editorRef.current?.getText() || "";
+
+      // Add each document to the zip
+      for (const doc of documents) {
+        const safeName = (doc.title || "Untitled").replace(/[/\\?%*:|"<>]/g, "-");
+        if (doc._id === activeDocId) {
+          zip.file(`${safeName}.md`, currentText);
+        } else {
+          zip.file(`${safeName}.md`, `# ${doc.title}\n\n*Document ID: ${doc._id}*\n*Exported from SyncFlow Workspace*`);
+        }
+      }
+
+      // Add README
+      zip.file(
+        "README.md",
+        `# SyncFlow Workspace Export\n\n- **Exported at**: ${new Date().toLocaleString()}\n- **Total Documents**: ${documents.length}\n- **Author / Creator**: Lovjyot Singh\n\n*Generated by SyncFlow Real-Time Collaborative Platform.*`
+      );
+
+      const content = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `syncflow-workspace-${new Date().toISOString().slice(0, 10)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setToastMessage("Workspace ZIP downloaded successfully!");
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch (err) {
+      alert("Failed to generate ZIP archive");
+    }
+  };
+
   // ── Filtered Documents ──────────────────────────────────────────────────────
   const filteredDocuments = documents.filter((doc) => {
     const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase());
@@ -576,7 +756,61 @@ export default function Home() {
   const charCount = editorText.length;
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: "#080810", fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div
+      className="flex h-screen overflow-hidden relative"
+      style={{ background: "#080810", fontFamily: "'Inter', system-ui, sans-serif" }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setIsDragging(true);
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+        setIsDragging(false);
+      }}
+      onDrop={handleDrop}
+    >
+      {/* Hidden File & Folder Inputs for Workspace import */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileInputChange}
+        style={{ display: "none" }}
+        multiple
+        accept=".md,.txt,.json,.csv,.js,.ts,.tsx,.jsx,.html,.css,.py,.java,.cpp,.c,.rs,.go,.sh,.yaml,.yml,.xml,.sql"
+      />
+      <input
+        type="file"
+        ref={folderInputRef}
+        onChange={handleFolderInputChange}
+        style={{ display: "none" }}
+        {...({ webkitdirectory: "", directory: "", multiple: true } as any)}
+      />
+
+      {/* Drag & Drop Visual Overlay */}
+      {isDragging && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(10,10,25,0.92)", backdropFilter: "blur(20px)",
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          border: "3px dashed rgba(99,102,241,0.7)", pointerEvents: "none",
+        }}>
+          <div style={{
+            width: "84px", height: "84px", borderRadius: "24px",
+            background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 0 50px rgba(99,102,241,0.7)", marginBottom: "24px",
+          }}>
+            <LucideUpload style={{ width: "38px", height: "38px", color: "white" }} />
+          </div>
+          <h2 style={{ color: "white", fontSize: "26px", fontWeight: "800", marginBottom: "8px", letterSpacing: "-0.5px" }}>
+            Drop Files or Folders Here
+          </h2>
+          <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "14px" }}>
+            SyncFlow will automatically open and import them into your workspace
+          </p>
+        </div>
+      )}
+
       {/* Ambient background orbs */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
         <div style={{
@@ -655,7 +889,7 @@ export default function Home() {
         </div>
 
         {/* Real-time Search */}
-        <div style={{ padding: "12px 14px 8px" }}>
+        <div style={{ padding: "12px 14px 6px" }}>
           <div style={{ position: "relative" }}>
             <LucideSearch style={{ position: "absolute", left: "10px", top: "9px", width: "13px", height: "13px", color: "rgba(255,255,255,0.3)" }} />
             <input
@@ -671,6 +905,58 @@ export default function Home() {
               }}
             />
           </div>
+        </div>
+
+        {/* Quick File & Folder Actions */}
+        <div style={{ display: "flex", gap: "5px", padding: "0 14px 10px" }}>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            title="Open & import local file(s) into workspace"
+            style={{
+              flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "4px",
+              padding: "6px 4px", borderRadius: "7px",
+              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
+              color: "rgba(255,255,255,0.75)", fontSize: "11px", fontWeight: "500", cursor: "pointer",
+              transition: "all 0.15s ease",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; (e.currentTarget as HTMLElement).style.color = "#a5b4fc"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)"; (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.75)"; }}
+          >
+            <LucideUpload style={{ width: "12px", height: "12px", color: "#818cf8" }} />
+            <span>Open File</span>
+          </button>
+
+          <button
+            onClick={() => folderInputRef.current?.click()}
+            title="Open & batch-import entire local folder"
+            style={{
+              flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "4px",
+              padding: "6px 4px", borderRadius: "7px",
+              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
+              color: "rgba(255,255,255,0.75)", fontSize: "11px", fontWeight: "500", cursor: "pointer",
+              transition: "all 0.15s ease",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; (e.currentTarget as HTMLElement).style.color = "#a5b4fc"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)"; (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.75)"; }}
+          >
+            <LucideFolderPlus style={{ width: "12px", height: "12px", color: "#38bdf8" }} />
+            <span>Open Folder</span>
+          </button>
+
+          <button
+            onClick={downloadWorkspaceZip}
+            title="Download entire workspace as a ZIP archive"
+            style={{
+              padding: "6px 8px", borderRadius: "7px",
+              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
+              color: "rgba(255,255,255,0.75)", fontSize: "11px", fontWeight: "500", cursor: "pointer",
+              transition: "all 0.15s ease",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(16,185,129,0.15)"; (e.currentTarget as HTMLElement).style.color = "#6ee7b7"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)"; (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.75)"; }}
+          >
+            <LucideArchive style={{ width: "12px", height: "12px", color: "#34d399" }} />
+          </button>
         </div>
 
         {/* Document Filter Tabs */}
@@ -1013,6 +1299,183 @@ export default function Home() {
               Join Workspace
             </button>
 
+            {/* Open / Import Dropdown */}
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => { setOpenMenuOpen(!openMenuOpen); setDownloadMenuOpen(false); setMoreMenuOpen(false); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: "5px", padding: "7px 12px", borderRadius: "8px",
+                  background: openMenuOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.07)",
+                  border: openMenuOpen ? "1px solid rgba(99,102,241,0.4)" : "1px solid rgba(255,255,255,0.1)",
+                  color: "rgba(255,255,255,0.85)", fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none",
+                  transition: "all 0.15s ease",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.12)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = openMenuOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.07)"; }}
+              >
+                <LucideFolder style={{ width: "13px", height: "13px", color: "#38bdf8" }} />
+                <span>Open</span>
+                <LucideChevronDown style={{ width: "12px", height: "12px", opacity: 0.6 }} />
+              </button>
+
+              {openMenuOpen && (
+                <div style={{
+                  position: "absolute", left: 0, top: "40px", width: "210px",
+                  background: "rgba(20,20,35,0.98)", border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: "12px", padding: "6px", zIndex: 100,
+                  boxShadow: "0 16px 40px rgba(0,0,0,0.6)", backdropFilter: "blur(20px)",
+                }}>
+                  <div style={{ padding: "6px 10px", fontSize: "10px", color: "rgba(255,255,255,0.3)", fontWeight: "600", textTransform: "uppercase" }}>
+                    Import to Workspace
+                  </div>
+                  <button
+                    onClick={() => { fileInputRef.current?.click(); setOpenMenuOpen(false); }}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  >
+                    <LucideUpload style={{ width: "13px", height: "13px", color: "#818cf8" }} />
+                    <div>
+                      <div style={{ fontWeight: "500" }}>Open File(s)</div>
+                      <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)" }}>.md, .txt, .json, code</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => { folderInputRef.current?.click(); setOpenMenuOpen(false); }}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  >
+                    <LucideFolderPlus style={{ width: "13px", height: "13px", color: "#38bdf8" }} />
+                    <div>
+                      <div style={{ fontWeight: "500" }}>Open Folder</div>
+                      <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)" }}>Batch import directory</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Download / Export Dropdown */}
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => { setDownloadMenuOpen(!downloadMenuOpen); setOpenMenuOpen(false); setMoreMenuOpen(false); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: "5px", padding: "7px 12px", borderRadius: "8px",
+                  background: downloadMenuOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.07)",
+                  border: downloadMenuOpen ? "1px solid rgba(99,102,241,0.4)" : "1px solid rgba(255,255,255,0.1)",
+                  color: "rgba(255,255,255,0.85)", fontSize: "13px", fontWeight: "500", cursor: "pointer", outline: "none",
+                  transition: "all 0.15s ease",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.12)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = downloadMenuOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.07)"; }}
+              >
+                <LucideDownload style={{ width: "13px", height: "13px", color: "#34d399" }} />
+                <span>Download</span>
+                <LucideChevronDown style={{ width: "12px", height: "12px", opacity: 0.6 }} />
+              </button>
+
+              {downloadMenuOpen && (
+                <div style={{
+                  position: "absolute", left: 0, top: "40px", width: "230px",
+                  background: "rgba(20,20,35,0.98)", border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: "12px", padding: "6px", zIndex: 100,
+                  boxShadow: "0 16px 40px rgba(0,0,0,0.6)", backdropFilter: "blur(20px)",
+                }}>
+                  <div style={{ padding: "6px 10px", fontSize: "10px", color: "rgba(255,255,255,0.3)", fontWeight: "600", textTransform: "uppercase" }}>
+                    Download Document
+                  </div>
+                  <button
+                    onClick={() => { downloadAsMarkdown(); setDownloadMenuOpen(false); }}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  >
+                    <LucideFileText style={{ width: "13px", height: "13px", color: "#818cf8" }} />
+                    <span>Markdown (.md)</span>
+                  </button>
+
+                  <button
+                    onClick={() => { downloadAsPlainText(); setDownloadMenuOpen(false); }}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  >
+                    <LucideFile style={{ width: "13px", height: "13px", color: "#94a3b8" }} />
+                    <span>Plain Text (.txt)</span>
+                  </button>
+
+                  <button
+                    onClick={() => { downloadAsHtml(); setDownloadMenuOpen(false); }}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  >
+                    <LucideFileCode style={{ width: "13px", height: "13px", color: "#38bdf8" }} />
+                    <span>Web Page (.html)</span>
+                  </button>
+
+                  <button
+                    onClick={() => { window.print(); setDownloadMenuOpen(false); }}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      background: "transparent", color: "rgba(255,255,255,0.85)", fontSize: "12px",
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.15)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  >
+                    <LucidePrinter style={{ width: "13px", height: "13px", color: "#f59e0b" }} />
+                    <span>Print / Save as PDF</span>
+                  </button>
+
+                  <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", margin: "4px 0" }} />
+
+                  <button
+                    onClick={() => { downloadWorkspaceZip(); setDownloadMenuOpen(false); }}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: "8px",
+                      padding: "8px 10px", borderRadius: "7px", border: "none",
+                      background: "rgba(16,185,129,0.1)", color: "#6ee7b7", fontSize: "12px", fontWeight: "600",
+                      cursor: "pointer", textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(16,185,129,0.2)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(16,185,129,0.1)"; }}
+                  >
+                    <LucideArchive style={{ width: "13px", height: "13px", color: "#34d399" }} />
+                    <span>Export Entire Workspace (.zip)</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Quick Copy Link Button */}
             <button
               onClick={() => {
@@ -1076,7 +1539,7 @@ export default function Home() {
                     Stats: {wordCount} words · {charCount} chars
                   </div>
                   <button
-                    onClick={exportMarkdown}
+                    onClick={() => { downloadAsMarkdown(); setMoreMenuOpen(false); }}
                     style={{
                       width: "100%", display: "flex", alignItems: "center", gap: "8px",
                       padding: "8px 10px", borderRadius: "7px", border: "none",
@@ -1335,7 +1798,7 @@ export default function Home() {
                         onPresenceChange={setPresence}
                         onConnectionChange={setIsConnected}
                         onChangeContent={setEditorText}
-                        onKicked={(msg) => {
+                        onKicked={(msg?: string) => {
                           alert(msg || "You have been removed from this workspace by the owner.");
                           const token = getToken();
                           if (token) {

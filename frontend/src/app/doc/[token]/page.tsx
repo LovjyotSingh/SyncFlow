@@ -118,6 +118,17 @@ export default function SharedDocPage() {
   };
 
   useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest?.(".header-menu-container")) {
+        setDownloadMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  useEffect(() => {
     if (!isLoggedIn()) {
       router.replace(`/login?redirect=/doc/${token}`);
       return;
@@ -201,27 +212,30 @@ export default function SharedDocPage() {
         <div style={{ position: "absolute", bottom: "-20%", right: "-10%", width: "45%", height: "55%", background: "radial-gradient(circle, rgba(139,92,246,0.10) 0%, transparent 70%)", filter: "blur(40px)" }} />
       </div>
 
-      <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative", zIndex: 10 }}>
+      <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, height: "100vh", position: "relative", zIndex: 10, overflow: "hidden" }}>
         {/* Header */}
         <header style={{
           display: zenMode ? "none" : "flex",
+          flexWrap: "nowrap",
           alignItems: "center", justifyContent: "space-between",
-          padding: "0 20px", height: "54px", minHeight: "54px", background: "rgba(8,8,16,0.75)",
+          padding: "0 24px", height: "56px", minHeight: "56px", background: "rgba(8,8,16,0.85)",
           borderBottom: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(20px)",
-          gap: "12px", overflow: "hidden",
+          position: "relative", zIndex: 50,
+          gap: "16px",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, flexShrink: 1 }}>
             <div style={{ width: "26px", height: "26px", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", borderRadius: "7px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "800", color: "white", boxShadow: "0 0 12px rgba(99,102,241,0.4)", flexShrink: 0 }}>SF</div>
-            <span style={{ color: "rgba(255,255,255,0.35)", fontSize: "12px", fontWeight: "500", flexShrink: 0 }}>Shared</span>
+            <span style={{ color: "rgba(255,255,255,0.35)", fontSize: "12px", fontWeight: "500", flexShrink: 0, whiteSpace: "nowrap" }}>Shared</span>
             <LucideChevronRight style={{ width: "12px", height: "12px", color: "rgba(255,255,255,0.15)", flexShrink: 0 }} />
             <div style={{
               color: "rgba(255,255,255,0.9)", fontSize: "13px", fontWeight: "600",
               overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-              maxWidth: "200px", background: "rgba(255,255,255,0.06)", padding: "3px 8px", borderRadius: "6px",
+              maxWidth: "220px", background: "rgba(255,255,255,0.06)", padding: "3px 10px", borderRadius: "7px",
+              border: "1px solid rgba(255,255,255,0.08)",
             }}>
               {docTitle || "Untitled Document"}
             </div>
-            <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "6px", background: "rgba(99,102,241,0.15)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.25)", fontWeight: "600", flexShrink: 0 }}>
+            <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "6px", background: "rgba(99,102,241,0.15)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.25)", fontWeight: "600", flexShrink: 0, whiteSpace: "nowrap" }}>
               Guest
             </span>
           </div>
@@ -232,10 +246,10 @@ export default function SharedDocPage() {
               <div style={{ display: "flex", alignItems: "center" }}>
                 {presence.slice(0, 3).map((user, i) => (
                   <div key={i} title={user.name} style={{
-                    width: "26px", height: "26px", borderRadius: "50%",
+                    width: "28px", height: "28px", borderRadius: "50%",
                     background: user.color, border: "2px solid #080810",
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: "9px", fontWeight: "700", color: "white",
+                    fontSize: "10px", fontWeight: "700", color: "white",
                     marginLeft: i > 0 ? "-7px" : "0",
                     boxShadow: `0 0 8px ${user.color}66`, position: "relative", zIndex: presence.length - i,
                   }}>
@@ -244,7 +258,7 @@ export default function SharedDocPage() {
                 ))}
                 {presence.length > 3 && (
                   <div style={{
-                    width: "22px", height: "22px", borderRadius: "50%",
+                    width: "24px", height: "24px", borderRadius: "50%",
                     background: "rgba(255,255,255,0.12)", border: "2px solid #080810",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: "9px", fontWeight: "700", color: "rgba(255,255,255,0.8)",
@@ -258,12 +272,13 @@ export default function SharedDocPage() {
 
             {/* Connection dot */}
             <div style={{
-              display: "flex", alignItems: "center", gap: "4px",
-              padding: "2px 6px", borderRadius: "6px",
+              display: "flex", alignItems: "center", gap: "5px",
+              padding: "3px 7px", borderRadius: "6px",
               background: "rgba(255,255,255,0.03)", fontSize: "11px", color: "rgba(255,255,255,0.3)",
+              whiteSpace: "nowrap",
             }}>
               <div style={{
-                width: "5px", height: "5px", borderRadius: "50%",
+                width: "6px", height: "6px", borderRadius: "50%",
                 background: isConnected ? "#10b981" : "#f43f5e",
                 boxShadow: isConnected ? "0 0 6px rgba(16,185,129,0.8)" : "none",
               }} />
@@ -274,8 +289,8 @@ export default function SharedDocPage() {
             <button
               onClick={() => setAiPanelOpen(!aiPanelOpen)}
               style={{
-                display: "flex", alignItems: "center", gap: "5px",
-                padding: "6px 12px", borderRadius: "8px",
+                display: "flex", alignItems: "center", gap: "6px",
+                padding: "6px 13px", borderRadius: "8px",
                 background: aiPanelOpen ? "rgba(99,102,241,0.22)" : "rgba(255,255,255,0.06)",
                 border: aiPanelOpen ? "1px solid rgba(99,102,241,0.45)" : "1px solid rgba(255,255,255,0.09)",
                 color: aiPanelOpen ? "#c7d2fe" : "rgba(255,255,255,0.8)",
@@ -288,11 +303,11 @@ export default function SharedDocPage() {
             </button>
 
             {/* Download Dropdown */}
-            <div style={{ position: "relative" }}>
+            <div className="header-menu-container" style={{ position: "relative" }}>
               <button
                 onClick={() => setDownloadMenuOpen(!downloadMenuOpen)}
                 style={{
-                  display: "flex", alignItems: "center", gap: "5px", padding: "6px 11px", borderRadius: "8px",
+                  display: "flex", alignItems: "center", gap: "5px", padding: "6px 12px", borderRadius: "8px",
                   background: downloadMenuOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.06)",
                   border: downloadMenuOpen ? "1px solid rgba(99,102,241,0.4)" : "1px solid rgba(255,255,255,0.09)",
                   color: "rgba(255,255,255,0.85)", fontSize: "12px", fontWeight: "500", cursor: "pointer", outline: "none",
@@ -306,10 +321,10 @@ export default function SharedDocPage() {
 
               {downloadMenuOpen && (
                 <div style={{
-                  position: "absolute", right: 0, top: "36px", width: "200px",
-                  background: "rgba(20,20,35,0.98)", border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: "12px", padding: "6px", zIndex: 100,
-                  boxShadow: "0 16px 40px rgba(0,0,0,0.6)", backdropFilter: "blur(20px)",
+                  position: "absolute", right: 0, top: "40px", width: "210px",
+                  background: "#121224", border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: "12px", padding: "6px", zIndex: 99999,
+                  boxShadow: "0 20px 60px rgba(0,0,0,0.85)", backdropFilter: "blur(20px)",
                 }}>
                   <button
                     onClick={() => { downloadAsMarkdown(); setDownloadMenuOpen(false); }}

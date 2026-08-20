@@ -82,11 +82,21 @@ export default function Home() {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
     };
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest?.(".header-menu-container")) {
+        setOpenMenuOpen(false);
+        setMoreMenuOpen(false);
+        setPresenceMenuOpen(false);
+      }
+    };
     window.addEventListener("keydown", handleKeyDown);
     document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("mousedown", handleOutsideClick);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("mousedown", handleOutsideClick);
     };
   }, [zenMode]);
 
@@ -1113,39 +1123,40 @@ export default function Home() {
       </aside>
 
       {/* ─── MAIN WORKSPACE ─── */}
-      <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative", zIndex: 10 }}>
+      <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, height: "100vh", position: "relative", zIndex: 10, overflow: "hidden" }}>
         {/* Top Header */}
         <header style={{
           display: zenMode ? "none" : "flex",
+          flexWrap: "nowrap",
           alignItems: "center", justifyContent: "space-between",
-          padding: "0 20px", height: "54px", minHeight: "54px",
-          background: "rgba(8,8,16,0.75)", borderBottom: "1px solid rgba(255,255,255,0.07)",
-          backdropFilter: "blur(20px)", position: "sticky", top: 0, zIndex: 30,
-          gap: "12px", overflow: "hidden",
+          padding: "0 24px", height: "56px", minHeight: "56px",
+          background: "rgba(8,8,16,0.85)", borderBottom: "1px solid rgba(255,255,255,0.07)",
+          backdropFilter: "blur(20px)", position: "relative", zIndex: 50,
+          gap: "16px",
         }}>
           {/* Left: Breadcrumb & Save Status */}
           <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, flexShrink: 1 }}>
-            <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)", fontWeight: "500" }}>Workspace</span>
+            <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)", fontWeight: "500", whiteSpace: "nowrap" }}>Workspace</span>
             <LucideChevronRight style={{ width: "12px", height: "12px", color: "rgba(255,255,255,0.15)", flexShrink: 0 }} />
             <div style={{
               fontSize: "13px", color: "rgba(255,255,255,0.9)", fontWeight: "600",
               background: "rgba(255,255,255,0.06)", padding: "3px 10px",
               borderRadius: "7px", border: "1px solid rgba(255,255,255,0.08)",
               overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-              maxWidth: "220px",
+              maxWidth: "240px",
             }}>
               {docTitle || "Untitled"}
             </div>
 
             {/* Sync status indicator */}
             <div style={{
-              display: "flex", alignItems: "center", gap: "4px",
-              padding: "2px 6px", borderRadius: "6px",
+              display: "flex", alignItems: "center", gap: "5px",
+              padding: "3px 7px", borderRadius: "6px",
               background: "rgba(255,255,255,0.03)", fontSize: "11px", color: "rgba(255,255,255,0.3)",
-              flexShrink: 0,
+              flexShrink: 0, whiteSpace: "nowrap",
             }} title={savingTitle ? "Saving changes to server..." : `Last saved ${lastSaved}`}>
               <div style={{
-                width: "5px", height: "5px", borderRadius: "50%",
+                width: "6px", height: "6px", borderRadius: "50%",
                 background: isConnected ? "#10b981" : "#f59e0b",
                 boxShadow: isConnected ? "0 0 6px rgba(16,185,129,0.8)" : "none",
               }} />
@@ -1157,7 +1168,7 @@ export default function Home() {
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
             {/* Live presence avatar stack */}
             {presence.length > 0 && (
-              <div style={{ position: "relative" }}>
+              <div className="header-menu-container" style={{ position: "relative" }}>
                 <div
                   onClick={() => setPresenceMenuOpen(!presenceMenuOpen)}
                   style={{ display: "flex", alignItems: "center", cursor: "pointer" }}
@@ -1165,10 +1176,10 @@ export default function Home() {
                 >
                   {presence.slice(0, 3).map((user, i) => (
                     <div key={i} title={user.name} style={{
-                      width: "26px", height: "26px", borderRadius: "50%",
+                      width: "28px", height: "28px", borderRadius: "50%",
                       background: user.color, border: "2px solid #080810",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: "9px", fontWeight: "700", color: "white",
+                      fontSize: "10px", fontWeight: "700", color: "white",
                       marginLeft: i > 0 ? "-7px" : "0",
                       boxShadow: `0 0 8px ${user.color}66`,
                       zIndex: presence.length - i, position: "relative",
@@ -1180,7 +1191,7 @@ export default function Home() {
                   ))}
                   {presence.length > 3 && (
                     <div style={{
-                      width: "22px", height: "22px", borderRadius: "50%",
+                      width: "24px", height: "24px", borderRadius: "50%",
                       background: "rgba(255,255,255,0.12)", border: "2px solid #080810",
                       display: "flex", alignItems: "center", justifyContent: "center",
                       fontSize: "9px", fontWeight: "700", color: "rgba(255,255,255,0.8)",
@@ -1193,10 +1204,10 @@ export default function Home() {
 
                 {presenceMenuOpen && (
                   <div style={{
-                    position: "absolute", right: 0, top: "34px", width: "250px",
-                    background: "rgba(20,20,35,0.98)", border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: "12px", padding: "10px", zIndex: 100,
-                    boxShadow: "0 16px 40px rgba(0,0,0,0.6)", backdropFilter: "blur(20px)",
+                    position: "absolute", right: 0, top: "40px", width: "260px",
+                    background: "#121224", border: "1px solid rgba(255,255,255,0.12)",
+                    borderRadius: "12px", padding: "10px", zIndex: 99999,
+                    boxShadow: "0 20px 60px rgba(0,0,0,0.85)", backdropFilter: "blur(20px)",
                   }}>
                     <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", fontWeight: "600", textTransform: "uppercase", marginBottom: "8px" }}>
                       Active in Room ({presence.length})
@@ -1252,8 +1263,8 @@ export default function Home() {
             <button
               onClick={() => setAiPanelOpen(!aiPanelOpen)}
               style={{
-                display: "flex", alignItems: "center", gap: "5px",
-                padding: "6px 12px", borderRadius: "8px",
+                display: "flex", alignItems: "center", gap: "6px",
+                padding: "6px 13px", borderRadius: "8px",
                 background: aiPanelOpen ? "rgba(99,102,241,0.22)" : "rgba(255,255,255,0.06)",
                 border: aiPanelOpen ? "1px solid rgba(99,102,241,0.45)" : "1px solid rgba(255,255,255,0.09)",
                 color: aiPanelOpen ? "#c7d2fe" : "rgba(255,255,255,0.8)",
@@ -1269,11 +1280,11 @@ export default function Home() {
             </button>
 
             {/* Unified Files & Export Dropdown */}
-            <div style={{ position: "relative" }}>
+            <div className="header-menu-container" style={{ position: "relative" }}>
               <button
-                onClick={() => { setOpenMenuOpen(!openMenuOpen); setMoreMenuOpen(false); }}
+                onClick={() => { setOpenMenuOpen(!openMenuOpen); setMoreMenuOpen(false); setPresenceMenuOpen(false); }}
                 style={{
-                  display: "flex", alignItems: "center", gap: "5px", padding: "6px 11px", borderRadius: "8px",
+                  display: "flex", alignItems: "center", gap: "5px", padding: "6px 12px", borderRadius: "8px",
                   background: openMenuOpen ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.06)",
                   border: openMenuOpen ? "1px solid rgba(99,102,241,0.4)" : "1px solid rgba(255,255,255,0.09)",
                   color: "rgba(255,255,255,0.85)", fontSize: "12px", fontWeight: "500", cursor: "pointer", outline: "none",
@@ -1289,10 +1300,10 @@ export default function Home() {
 
               {openMenuOpen && (
                 <div style={{
-                  position: "absolute", right: 0, top: "36px", width: "230px",
-                  background: "rgba(20,20,35,0.98)", border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: "12px", padding: "6px", zIndex: 100,
-                  boxShadow: "0 16px 40px rgba(0,0,0,0.6)", backdropFilter: "blur(20px)",
+                  position: "absolute", right: 0, top: "40px", width: "230px",
+                  background: "#121224", border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: "12px", padding: "6px", zIndex: 99999,
+                  boxShadow: "0 20px 60px rgba(0,0,0,0.85)", backdropFilter: "blur(20px)",
                 }}>
                   <div style={{ padding: "4px 8px", fontSize: "10px", color: "rgba(255,255,255,0.35)", fontWeight: "700", textTransform: "uppercase" }}>
                     Open & Import
@@ -1431,9 +1442,9 @@ export default function Home() {
             </button>
 
             {/* More Options Dropdown */}
-            <div style={{ position: "relative" }}>
+            <div className="header-menu-container" style={{ position: "relative" }}>
               <button
-                onClick={() => { setMoreMenuOpen(!moreMenuOpen); setOpenMenuOpen(false); }}
+                onClick={() => { setMoreMenuOpen(!moreMenuOpen); setOpenMenuOpen(false); setPresenceMenuOpen(false); }}
                 style={{
                   width: "30px", height: "30px", borderRadius: "8px",
                   background: moreMenuOpen ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.05)",
@@ -1447,10 +1458,10 @@ export default function Home() {
 
               {moreMenuOpen && (
                 <div style={{
-                  position: "absolute", right: 0, top: "36px", width: "220px",
-                  background: "rgba(20,20,35,0.98)", border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: "12px", padding: "6px", zIndex: 100,
-                  boxShadow: "0 16px 40px rgba(0,0,0,0.6)", backdropFilter: "blur(20px)",
+                  position: "absolute", right: 0, top: "40px", width: "230px",
+                  background: "#121224", border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: "12px", padding: "6px", zIndex: 99999,
+                  boxShadow: "0 20px 60px rgba(0,0,0,0.85)", backdropFilter: "blur(20px)",
                 }}>
                   <div style={{ padding: "6px 8px", fontSize: "10px", color: "rgba(255,255,255,0.3)", fontWeight: "600", textTransform: "uppercase" }}>
                     Stats: {wordCount} words · {charCount} chars

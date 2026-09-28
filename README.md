@@ -1,6 +1,10 @@
 # SyncFlow
 
-SyncFlow is a real-time collaborative workspace. People sign in, write on the same page together, join with a shared link, and pass files to everyone already in the room.
+## About
+
+SyncFlow is a real-time collaborative workspace. Sign in, write on the same page as other people, and the document stays in sync for everyone in the room. Share a link to invite someone, or paste their link into Connect to join. Use the plus button to share a file with the people already on that page.
+
+Built with Next.js, TypeScript, a BlockNote editor, Yjs over Socket.io, MongoDB, and Redis.
 
 **Live demo:** [syncflow-sss.vercel.app](https://syncflow-sss.vercel.app)
 

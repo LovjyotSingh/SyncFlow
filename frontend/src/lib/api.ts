@@ -1,4 +1,4 @@
-import { api } from './auth';
+import { ApiError, BACKEND_URL, api, getToken } from './auth';
 
 export interface Person {
   _id: string;
@@ -72,6 +72,94 @@ export function leaveDocument(id: string) {
 
 export function revokeShareLink(id: string) {
   return api<{ shareToken: string }>(`/api/documents/${id}/revoke-link`, { method: 'POST' });
+}
+
+export interface SharedFileRecord {
+  _id: string;
+  name: string;
+  mime: string;
+  size: number;
+  createdAt: string;
+  uploadedBy: {
+    _id: string;
+    name: string;
+  };
+}
+
+const PREVIEWABLE = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'application/pdf',
+  'text/plain',
+]);
+
+export function listSharedFiles(documentId: string) {
+  return api<SharedFileRecord[]>(`/api/documents/${documentId}/files`);
+}
+
+export function deleteSharedFile(documentId: string, fileId: string) {
+  return api<{ id: string }>(`/api/documents/${documentId}/files/${fileId}`, { method: 'DELETE' });
+}
+
+export async function uploadSharedFile(documentId: string, file: File) {
+  const token = getToken();
+  const body = new FormData();
+  body.append('file', file);
+  let response: Response;
+  try {
+    response = await fetch(`${BACKEND_URL}/api/documents/${documentId}/files`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body,
+    });
+  } catch {
+    throw new ApiError('Cannot reach SyncFlow. Check that the API is running.', 0);
+  }
+  const data = await response.json().catch(() => ({} as { message?: string }));
+  if (!response.ok) throw new ApiError(data.message || 'Could not share that file', response.status);
+  return data as SharedFileRecord;
+}
+
+export async function openSharedFile(documentId: string, file: SharedFileRecord) {
+  const token = getToken();
+  let response: Response;
+  try {
+    response = await fetch(`${BACKEND_URL}/api/documents/${documentId}/files/${file._id}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch {
+    throw new ApiError('Cannot reach SyncFlow. Check that the API is running.', 0);
+  }
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({} as { message?: string }));
+    throw new ApiError(data.message || 'Could not open that file', response.status);
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  if (PREVIEWABLE.has(file.mime)) {
+    const opened = window.open(url, '_blank', 'noopener,noreferrer');
+    if (opened) {
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+      return;
+    }
+  }
+
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = file.name;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+export function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function formatWhen(iso: string) {

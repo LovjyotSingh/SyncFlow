@@ -98,6 +98,7 @@ export default function ShareDialog({ document, isOwner, onClose, onToken }: Sha
             {copied ? 'Copied' : 'Copy'}
           </button>
         </div>
+        <p className="mt-2 text-xs text-[#6f675d]">They can paste this link into Connect to join the page.</p>
 
         <form onSubmit={invite} className="mt-4 flex gap-2">
           <input

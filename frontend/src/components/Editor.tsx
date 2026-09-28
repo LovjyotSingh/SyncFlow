@@ -18,6 +18,7 @@ interface EditorProps {
   onStatus: (status: 'connecting' | 'live' | 'offline') => void;
   onWords: (words: number) => void;
   onForbidden: (message: string) => void;
+  onFilesChanged?: () => void;
 }
 
 interface Session {
@@ -81,16 +82,19 @@ export default function Editor({
   onStatus,
   onWords,
   onForbidden,
+  onFilesChanged,
 }: EditorProps) {
   const [session, setSession] = useState<Session | null>(null);
   const onPresenceRef = useRef(onPresence);
   const onStatusRef = useRef(onStatus);
   const onForbiddenRef = useRef(onForbidden);
+  const onFilesChangedRef = useRef(onFilesChanged);
 
   useEffect(() => {
     onPresenceRef.current = onPresence;
     onStatusRef.current = onStatus;
     onForbiddenRef.current = onForbidden;
+    onFilesChangedRef.current = onFilesChanged;
   });
 
   useEffect(() => {
@@ -109,6 +113,7 @@ export default function Editor({
       onStatus: (status) => onStatusRef.current(status),
       onPresence: (users) => onPresenceRef.current(users),
       onForbidden: (message) => onForbiddenRef.current(message),
+      onFilesChanged: () => onFilesChangedRef.current?.(),
     });
 
     return () => {

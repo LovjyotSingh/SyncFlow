@@ -1,21 +1,24 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { FormEvent, useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   createDocument,
   deleteDocument,
   formatWhen,
   initials,
+  joinShare,
   leaveDocument,
   listDocuments,
   ownerId,
   renameDocument,
   type SyncDocument,
 } from '@/lib/api';
+import { shareTokenFromInput } from '@/lib/shareLink';
 import { ApiError, api, getAuthSnapshot, logout, subscribeAuth, type AuthUser } from '@/lib/auth';
 import type { PresenceUser } from '@/lib/collab';
+import FileShare from './FileShare';
 import ShareDialog from './ShareDialog';
 
 const Editor = dynamic(() => import('./Editor'), { ssr: false });
@@ -118,6 +121,17 @@ export default function Workspace() {
     router.replace(`/?doc=${id}`);
   }
 
+  async function connectWithToken(token: string) {
+    const document = await joinShare(token);
+    setDocuments((current) => {
+      const exists = current.some((item) => item._id === document._id);
+      if (!exists) return [document, ...current];
+      return current.map((item) => item._id === document._id ? { ...item, ...document } : item);
+    });
+    setError('');
+    openPage(document._id);
+  }
+
   function signOut() {
     logout();
     router.replace('/login');
@@ -158,6 +172,9 @@ export default function Workspace() {
             placeholder="Search pages"
             className="mt-3 w-full rounded-2xl border border-white/10 bg-ink-2 px-3 py-2.5 text-sm outline-none placeholder:text-mist focus:border-saffron"
           />
+          <div className="mt-3">
+            <ConnectForm onConnect={connectWithToken} />
+          </div>
         </div>
         <nav className="mt-3 flex-1 space-y-1 overflow-y-auto px-3 pb-4">
           {visible.length === 0 && (
@@ -219,10 +236,13 @@ export default function Workspace() {
           />
         ) : (
           <div className="grid min-h-[70dvh] place-items-center px-6">
-            <div className="max-w-md text-center">
+            <div className="w-full max-w-md text-center">
               <h1 className="font-serif text-5xl">Start a page</h1>
-              <p className="mt-3 text-mist">A blank sheet, shared the moment you send the link.</p>
-              <button type="button" onClick={() => void makePage()} className="mt-6 rounded-full bg-saffron px-5 py-3 text-sm font-medium text-ink">
+              <p className="mt-3 text-mist">Paste a shared link to join someone, or start a blank page and share files on it.</p>
+              <div className="mt-6 text-left">
+                <ConnectForm onConnect={connectWithToken} />
+              </div>
+              <button type="button" onClick={() => void makePage()} className="mt-4 rounded-full bg-saffron px-5 py-3 text-sm font-medium text-ink">
                 New page
               </button>
             </div>
@@ -249,6 +269,7 @@ function DocCanvas({
   const [words, setWords] = useState(0);
   const [presence, setPresence] = useState<PresenceUser[]>([]);
   const [shareOpen, setShareOpen] = useState(false);
+  const [fileTick, setFileTick] = useState(0);
   const [notice, setNotice] = useState('');
   const [confirming, setConfirming] = useState(false);
   const isOwner = ownerId(document) === user.id;
@@ -278,6 +299,15 @@ function DocCanvas({
   const statusLabel = status === 'live' ? 'Live' : status === 'offline' ? 'Offline' : 'Connecting';
 
   return (
+    <FileShare
+      documentId={document._id}
+      userId={user.id}
+      isOwner={isOwner}
+      refreshKey={fileTick}
+      onNotice={setNotice}
+      onActivity={() => onUpdated({ ...document, updatedAt: new Date().toISOString() })}
+    >
+      {({ addButton, files }) => (
     <div className="px-4 py-4 sm:px-6 lg:px-10 lg:py-8">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 text-sm text-mist">
@@ -301,6 +331,7 @@ function DocCanvas({
               </span>
             ))}
           </div>
+          {addButton}
           <button type="button" onClick={() => setShareOpen(true)} className="rounded-full bg-paper px-4 py-2 text-sm font-medium text-ink">
             Share
           </button>
@@ -324,6 +355,7 @@ function DocCanvas({
         </p>
       )}
       {notice && <p className="mb-3 text-sm text-[#f3c2b6]">{notice}</p>}
+      {files}
 
       <article className="mx-auto min-h-[72dvh] max-w-3xl rounded-[28px] bg-paper px-5 py-7 text-ink shadow-[0_30px_80px_rgba(0,0,0,0.28)] sm:px-10 sm:py-10">
         <input
@@ -341,6 +373,7 @@ function DocCanvas({
           onStatus={setStatus}
           onWords={setWords}
           onForbidden={setNotice}
+          onFilesChanged={() => setFileTick((current) => current + 1)}
         />
       </article>
 
@@ -353,5 +386,54 @@ function DocCanvas({
         />
       )}
     </div>
+      )}
+    </FileShare>
+  );
+}
+
+function ConnectForm({ onConnect }: { onConnect: (token: string) => Promise<void> }) {
+  const inputId = useId();
+  const [value, setValue] = useState('');
+  const [error, setError] = useState('');
+  const [pending, setPending] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const token = shareTokenFromInput(value);
+    if (!token) {
+      setError('Paste a SyncFlow share link');
+      return;
+    }
+    setPending(true);
+    setError('');
+    try {
+      await onConnect(token);
+      setValue('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not open that link');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <form onSubmit={(event) => void submit(event)}>
+      <label htmlFor={inputId} className="mb-1.5 block text-xs tracking-[0.18em] text-mist uppercase">
+        Connect
+      </label>
+      <div className="flex gap-2">
+        <input
+          id={inputId}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          placeholder="Paste a shared link"
+          className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-ink-2 px-3 py-2.5 text-sm outline-none placeholder:text-mist focus:border-saffron"
+        />
+        <button type="submit" disabled={pending} className="rounded-2xl bg-white/10 px-3 text-sm text-paper disabled:opacity-60">
+          {pending ? '…' : 'Join'}
+        </button>
+      </div>
+      {error && <p className="mt-2 text-xs text-[#f3c2b6]" role="alert">{error}</p>}
+    </form>
   );
 }

@@ -1,8 +1,28 @@
-import { Router, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { randomUUID } from 'crypto';
+import mongoose from 'mongoose';
+import multer from 'multer';
+import type { Server } from 'socket.io';
 import { Document } from '../models/Document';
+import { SharedFile } from '../models/SharedFile';
 import { User } from '../models/User';
 import { requireAuth, AuthRequest } from './auth';
+
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_FILES_PER_PAGE = 40;
+const PREVIEW_MIME = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'application/pdf',
+  'text/plain',
+]);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_FILE_BYTES, files: 1 },
+});
 
 const router = Router();
 
@@ -180,6 +200,146 @@ router.post('/:id/leave', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('leave failed', error);
     res.status(500).json({ message: 'Could not leave the page' });
+  }
+});
+
+function safeFileName(name: string) {
+  const base = name.split(/[/\\]/).pop() || 'file';
+  const cleaned = base.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 180);
+  return cleaned || 'file';
+}
+
+function publicFile(file: {
+  _id: unknown;
+  name: string;
+  mime?: string;
+  size: number;
+  createdAt?: Date;
+  uploadedBy?: { _id?: unknown; name?: string } | string | null;
+}) {
+  const person = file.uploadedBy && typeof file.uploadedBy === 'object'
+    ? { _id: String(file.uploadedBy._id || ''), name: file.uploadedBy.name || 'Someone' }
+    : { _id: String(file.uploadedBy || ''), name: 'Someone' };
+  return {
+    _id: String(file._id),
+    name: file.name,
+    mime: file.mime || 'application/octet-stream',
+    size: file.size,
+    createdAt: file.createdAt,
+    uploadedBy: person,
+  };
+}
+
+function notifyFiles(req: AuthRequest, documentId: string) {
+  const io = req.app.get('io') as Server | undefined;
+  io?.to(documentId).emit('files-changed');
+}
+
+function readUpload(req: AuthRequest, res: Response, next: NextFunction) {
+  upload.single('file')(req, res, (err: unknown) => {
+    if (!err) return next();
+    if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ message: 'Files must be 10 MB or smaller' });
+    }
+    return res.status(400).json({ message: 'Could not read that file' });
+  });
+}
+
+router.get('/:id/files', async (req: AuthRequest, res: Response) => {
+  try {
+    const document = await Document.findOne(accessFilter(req.userId!, param(req.params.id))).select('_id');
+    if (!document) return res.status(404).json({ message: 'Page not found' });
+    const files = await SharedFile.find({ document: document._id })
+      .sort({ createdAt: -1 })
+      .select('-data')
+      .populate('uploadedBy', 'name');
+    res.json(files.map((file) => publicFile(file)));
+  } catch (error) {
+    console.error('list files failed', error);
+    res.status(500).json({ message: 'Could not load shared files' });
+  }
+});
+
+router.post('/:id/files', readUpload, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.file || req.file.size < 1) {
+      return res.status(400).json({ message: 'Choose a file to share' });
+    }
+    const document = await Document.findOne(accessFilter(req.userId!, param(req.params.id)));
+    if (!document) return res.status(404).json({ message: 'Page not found' });
+
+    const count = await SharedFile.countDocuments({ document: document._id });
+    if (count >= MAX_FILES_PER_PAGE) {
+      return res.status(400).json({ message: 'This page already has 40 shared files' });
+    }
+
+    const saved = await SharedFile.create({
+      document: document._id,
+      name: safeFileName(req.file.originalname),
+      mime: req.file.mimetype || 'application/octet-stream',
+      size: req.file.size,
+      data: req.file.buffer,
+      uploadedBy: req.userId,
+    });
+    await Document.updateOne({ _id: document._id }, { $set: { updatedAt: new Date() } });
+
+    const created = await SharedFile.findById(saved._id).select('-data').populate('uploadedBy', 'name');
+    notifyFiles(req, String(document._id));
+    res.status(201).json(publicFile(created || saved));
+  } catch (error) {
+    console.error('upload file failed', error);
+    res.status(500).json({ message: 'Could not share that file' });
+  }
+});
+
+router.get('/:id/files/:fileId', async (req: AuthRequest, res: Response) => {
+  try {
+    const document = await Document.findOne(accessFilter(req.userId!, param(req.params.id))).select('_id');
+    if (!document) return res.status(404).json({ message: 'Page not found' });
+    if (!mongoose.isValidObjectId(param(req.params.fileId))) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+    const file = await SharedFile.findOne({ _id: param(req.params.fileId), document: document._id });
+    if (!file) return res.status(404).json({ message: 'File not found' });
+
+    const mime = file.mime || 'application/octet-stream';
+    const ascii = file.name.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
+    const disposition = PREVIEW_MIME.has(mime) ? 'inline' : 'attachment';
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Length', String(file.size));
+    res.setHeader('Content-Disposition', `${disposition}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(file.name)}`);
+    res.send(file.data);
+  } catch (error) {
+    console.error('download file failed', error);
+    res.status(500).json({ message: 'Could not open that file' });
+  }
+});
+
+router.delete('/:id/files/:fileId', async (req: AuthRequest, res: Response) => {
+  try {
+    const document = await Document.findOne(accessFilter(req.userId!, param(req.params.id)));
+    if (!document) return res.status(404).json({ message: 'Page not found' });
+    if (!mongoose.isValidObjectId(param(req.params.fileId))) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+    const file = await SharedFile.findOne({ _id: param(req.params.fileId), document: document._id });
+    if (!file) return res.status(404).json({ message: 'File not found' });
+
+    const isOwner = document.owner?.toString() === req.userId;
+    const isUploader = file.uploadedBy?.toString() === req.userId;
+    if (!isOwner && !isUploader) {
+      return res.status(403).json({ message: 'Only the owner or the person who shared it can remove this file' });
+    }
+
+    await file.deleteOne();
+    await Document.updateOne({ _id: document._id }, { $set: { updatedAt: new Date() } });
+    notifyFiles(req, String(document._id));
+    res.json({ id: String(file._id) });
+  } catch (error) {
+    console.error('delete file failed', error);
+    res.status(500).json({ message: 'Could not remove that file' });
   }
 });
 

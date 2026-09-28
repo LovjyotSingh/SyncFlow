@@ -57,6 +57,8 @@ const io = new Server(server, {
   pingInterval: 25000,
 });
 
+app.set('io', io);
+
 setupSocket(io, redisClient);
 
 const port = Number(process.env.PORT) || 5000;

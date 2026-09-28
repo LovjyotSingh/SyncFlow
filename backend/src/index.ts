@@ -1,70 +1,57 @@
 import express from 'express';
 import http from 'http';
-import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { setupSocket } from './socket/index';
 import mongoose from 'mongoose';
-import { createClient } from 'redis';
+import { createClient, type RedisClientType } from 'redis';
+import { Server } from 'socket.io';
 import authRoutes from './routes/auth';
 import documentRoutes from './routes/documents';
-import aiRoutes from './routes/ai';
+import { setupSocket } from './socket';
 
 dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
 
-// Enable CORS — accept localhost in dev, production URL in prod
-const allowedOrigins = [
-  'http://localhost:3000',
-  process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : null,
-].filter(Boolean) as string[];
-
 app.use(cors({
-  origin: true, // dynamically reflect the request origin (solves all CORS issues)
+  origin: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
+app.use(express.json({ limit: '1mb' }));
 
-app.use(express.json());
-
-// Connect to MongoDB
-if (process.env.MONGODB_URI) {
-  mongoose.connect(process.env.MONGODB_URI)
-    .then(() => console.log('🍃 Connected to MongoDB Atlas'))
-    .catch((err) => console.error('MongoDB connection error:', err));
-} else {
-  console.warn('⚠️ MONGODB_URI not found in .env');
-}
-
-// Connect to Upstash Redis
-const redisClient = createClient({
-  url: process.env.REDIS_URL
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', service: 'SyncFlow' });
 });
 
-redisClient.on('error', (err) => console.log('Redis Client Error', err));
-redisClient.on('connect', () => console.log('⚡ Connected to Upstash Redis'));
-
-if (process.env.REDIS_URL) {
-  redisClient.connect();
-} else {
-  console.warn('⚠️ REDIS_URL not found in .env');
-}
-
-// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/documents', documentRoutes);
-app.use('/api', aiRoutes);
-app.use('/api/ai', aiRoutes);
 
-// Initialize Socket.io for real-time syncing
+if (process.env.MONGODB_URI) {
+  mongoose.connect(process.env.MONGODB_URI)
+    .then(() => console.log('Connected to MongoDB'))
+    .catch((err) => console.error('MongoDB connection error', err));
+} else {
+  console.warn('MONGODB_URI is not set');
+}
+
+const redisClient: RedisClientType | null = process.env.REDIS_URL
+  ? createClient({ url: process.env.REDIS_URL })
+  : null;
+
+if (redisClient) {
+  redisClient.on('error', (err) => console.error('Redis error', err));
+  redisClient.connect()
+    .then(() => console.log('Connected to Redis'))
+    .catch((err) => console.error('Redis connection error', err));
+} else {
+  console.warn('REDIS_URL is not set; document state stays in memory until restart');
+}
+
 const io = new Server(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST'],
-  },
+  cors: { origin: true, methods: ['GET', 'POST'], credentials: true },
   transports: ['websocket', 'polling'],
   pingTimeout: 60000,
   pingInterval: 25000,
@@ -72,12 +59,7 @@ const io = new Server(server, {
 
 setupSocket(io, redisClient);
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', service: 'SyncFlow Real-time API' });
-});
-
-const PORT = process.env.PORT || 5000;
-
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+const port = Number(process.env.PORT) || 5000;
+server.listen(port, () => {
+  console.log(`SyncFlow API listening on ${port}`);
 });

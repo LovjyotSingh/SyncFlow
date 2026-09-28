@@ -1,31 +1,26 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
+import type { Metadata } from 'next';
+import { Fraunces, Outfit } from 'next/font/google';
+import './globals.css';
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+const outfit = Outfit({
+  subsets: ['latin'],
+  variable: '--font-outfit',
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  variable: '--font-fraunces',
 });
 
 export const metadata: Metadata = {
-  title: "SyncFlow — Real-Time Collaborative Workspace",
-  description: "Modern, real-time collaborative workspace and AI document editor created by Lovjyot Singh.",
-  authors: [{ name: "Lovjyot Singh" }],
-  creator: "Lovjyot Singh",
+  title: 'SyncFlow',
+  description: 'Real-time collaborative pages.',
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en" className={`${outfit.variable} ${fraunces.variable} h-full`}>
+      <body className="min-h-full antialiased">{children}</body>
     </html>
   );
 }

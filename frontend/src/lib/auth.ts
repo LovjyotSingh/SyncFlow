@@ -1,5 +1,3 @@
-// Client-side auth utilities
-
 export const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000').replace(/\/+$/, '');
 
 export interface AuthUser {
@@ -9,97 +7,116 @@ export interface AuthUser {
   avatarColor: string;
 }
 
+const TOKEN_KEY = 'sf_token';
+const USER_KEY = 'sf_user';
+const EVENT = 'sf-auth';
+
+type Listener = () => void;
+const listeners = new Set<Listener>();
+
+function emit() {
+  listeners.forEach((listener) => listener());
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(EVENT));
+  }
+}
+
+export function subscribeAuth(listener: Listener) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('sf_token');
+  return localStorage.getItem(TOKEN_KEY);
 }
 
-export function setToken(token: string): void {
-  localStorage.setItem('sf_token', token);
-}
-
-export function clearToken(): void {
-  localStorage.removeItem('sf_token');
-  localStorage.removeItem('sf_user');
-}
+let cachedRaw: string | null | undefined;
+let cachedUser: AuthUser | null = null;
 
 export function getUser(): AuthUser | null {
   if (typeof window === 'undefined') return null;
-  const raw = localStorage.getItem('sf_user');
-  if (!raw) return null;
-  try { return JSON.parse(raw); } catch { return null; }
-}
-
-export function setUser(user: AuthUser): void {
-  localStorage.setItem('sf_user', JSON.stringify(user));
-}
-
-export function isLoggedIn(): boolean {
-  return !!getToken() && !!getUser();
-}
-
-async function parseResponseJson(res: Response, fallbackAction = 'Request'): Promise<any> {
-  const contentType = res.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    try {
-      return await res.json();
-    } catch {}
+  const raw = localStorage.getItem(USER_KEY);
+  if (raw === cachedRaw) return cachedUser;
+  cachedRaw = raw;
+  if (!raw) {
+    cachedUser = null;
+    return null;
   }
-  const text = await res.text().catch(() => '');
-  if (text && text.trim().startsWith('{')) {
-    try {
-      return JSON.parse(text);
-    } catch {}
-  }
-  if (res.status === 502 || res.status === 503 || res.status === 504) {
-    throw new Error('Backend server is waking up (Render cold start). Please retry in 20-30 seconds.');
-  }
-  if (res.status === 404) {
-    throw new Error(`API endpoint not found (404). Please verify NEXT_PUBLIC_BACKEND_URL (${BACKEND_URL}).`);
-  }
-  if (!res.ok) {
-    throw new Error(`${fallbackAction} failed (Status ${res.status})`);
-  }
-  return {};
-}
-
-export async function login(email: string, password: string): Promise<AuthUser> {
-  let res: Response;
   try {
-    res = await fetch(`${BACKEND_URL}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+    const parsed = JSON.parse(raw) as AuthUser;
+    cachedUser = parsed?.id && parsed.email ? parsed : null;
+  } catch {
+    cachedUser = null;
+  }
+  return cachedUser;
+}
+
+export function getAuthSnapshot(): AuthUser | null {
+  return getUser();
+}
+
+export function setSession(token: string, user: AuthUser) {
+  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  emit();
+}
+
+export function clearSession() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  emit();
+}
+
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getToken();
+  let response: Response;
+  try {
+    response = await fetch(`${BACKEND_URL}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers || {}),
+      },
     });
   } catch {
-    throw new Error(`Cannot connect to backend (${BACKEND_URL}). Please verify your backend server is live.`);
+    throw new ApiError('Cannot reach SyncFlow. Check that the API is running.', 0);
   }
-  const data = await parseResponseJson(res, 'Login');
-  if (!res.ok) throw new Error(data.message || 'Login failed');
-  setToken(data.token);
-  setUser(data.user);
+
+  const data = await response.json().catch(() => ({} as { message?: string }));
+  if (!response.ok) {
+    throw new ApiError(data.message || 'Request failed', response.status);
+  }
+  return data as T;
+}
+
+export async function login(email: string, password: string) {
+  const data = await api<{ token: string; user: AuthUser }>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+  setSession(data.token, data.user);
   return data.user;
 }
 
-export async function register(name: string, email: string, password: string): Promise<AuthUser> {
-  let res: Response;
-  try {
-    res = await fetch(`${BACKEND_URL}/api/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password }),
-    });
-  } catch {
-    throw new Error(`Cannot connect to backend (${BACKEND_URL}). Please verify your backend server is live.`);
-  }
-  const data = await parseResponseJson(res, 'Registration');
-  if (!res.ok) throw new Error(data.message || 'Registration failed');
-  setToken(data.token);
-  setUser(data.user);
+export async function register(name: string, email: string, password: string) {
+  const data = await api<{ token: string; user: AuthUser }>('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ name, email, password }),
+  });
+  setSession(data.token, data.user);
   return data.user;
 }
 
-export function logout(): void {
-  clearToken();
-  if (typeof window !== 'undefined') window.location.href = '/login';
+export function logout() {
+  clearSession();
 }

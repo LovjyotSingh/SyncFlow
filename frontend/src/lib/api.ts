@@ -86,15 +86,6 @@ export interface SharedFileRecord {
   };
 }
 
-const PREVIEWABLE = new Set([
-  'image/png',
-  'image/jpeg',
-  'image/gif',
-  'image/webp',
-  'application/pdf',
-  'text/plain',
-]);
-
 export function listSharedFiles(documentId: string) {
   return api<SharedFileRecord[]>(`/api/documents/${documentId}/files`);
 }
@@ -122,7 +113,7 @@ export async function uploadSharedFile(documentId: string, file: File) {
   return data as SharedFileRecord;
 }
 
-export async function openSharedFile(documentId: string, file: SharedFileRecord) {
+export async function fetchSharedFile(documentId: string, file: SharedFileRecord) {
   const token = getToken();
   let response: Response;
   try {
@@ -137,23 +128,21 @@ export async function openSharedFile(documentId: string, file: SharedFileRecord)
     throw new ApiError(data.message || 'Could not open that file', response.status);
   }
 
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  if (PREVIEWABLE.has(file.mime)) {
-    const opened = window.open(url, '_blank', 'noopener,noreferrer');
-    if (opened) {
-      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
-      return;
-    }
-  }
+  const raw = await response.blob();
+  const mime = (file.mime || raw.type || 'application/octet-stream').split(';')[0].trim();
+  if (!mime || raw.type === mime) return raw;
+  return new Blob([raw], { type: mime });
+}
 
+export function downloadBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = file.name;
+  anchor.download = name;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export function formatFileSize(bytes: number) {

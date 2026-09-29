@@ -118,7 +118,7 @@ Create an account with a name, an email, and a password of at least 8 characters
 The **+** button next to **Share** uploads one file to the current page.
 
 - Maximum size is 32 MB, including large source files.
-- Text and code open in the page. PDFs open in a new tab. Other types download.
+- Text and code open in the page. Choose **Add this to space** to drop that text onto the shared page, where everyone can edit it together. PDFs open in a new tab. Other types download.
 - Files travel with the live page, so the other people in the room see them without a separate upload service.
 - Only members of the page can list or upload files. Removing a file is limited to the page owner and the person who shared it.
 

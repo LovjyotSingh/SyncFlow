@@ -21,6 +21,7 @@ interface FileShareProps {
   isOwner: boolean;
   onNotice: (message: string) => void;
   onActivity: () => void;
+  onAddToSpace: (name: string, text: string) => boolean;
   children: (parts: { addButton: ReactNode; files: ReactNode }) => ReactNode;
 }
 
@@ -31,6 +32,7 @@ export default function FileShare({
   isOwner,
   onNotice,
   onActivity,
+  onAddToSpace,
   children,
 }: FileShareProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -206,6 +208,7 @@ export default function FileShare({
         <FilePreviewDialog
           preview={preview}
           onClose={closePreview}
+          onAddToSpace={onAddToSpace}
         />
       )}
     </>
@@ -220,7 +223,15 @@ interface FilePreview {
   blob: Blob;
 }
 
-function FilePreviewDialog({ preview, onClose }: { preview: FilePreview; onClose: () => void }) {
+function FilePreviewDialog({
+  preview,
+  onClose,
+  onAddToSpace,
+}: {
+  preview: FilePreview;
+  onClose: () => void;
+  onAddToSpace: (name: string, text: string) => boolean;
+}) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -240,6 +251,17 @@ function FilePreviewDialog({ preview, onClose }: { preview: FilePreview; onClose
         <div className="mb-3 flex items-start justify-between gap-3">
           <h2 id="file-preview-title" className="min-w-0 truncate font-serif text-2xl">{preview.name}</h2>
           <div className="flex shrink-0 items-center gap-2">
+            {preview.kind === 'text' && preview.text !== undefined && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (onAddToSpace(preview.name, preview.text || '')) onClose();
+                }}
+                className="rounded-full bg-ink px-3 py-1.5 text-sm text-paper"
+              >
+                Add this to space
+              </button>
+            )}
             <button type="button" onClick={() => downloadBlob(preview.blob, preview.name)} className="rounded-full border border-ink px-3 py-1.5 text-sm">
               Download
             </button>

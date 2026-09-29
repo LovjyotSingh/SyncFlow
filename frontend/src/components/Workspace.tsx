@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { FormEvent, useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
+import type * as Y from 'yjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   createDocument,
@@ -269,7 +270,7 @@ function DocCanvas({
   const [words, setWords] = useState(0);
   const [presence, setPresence] = useState<PresenceUser[]>([]);
   const [shareOpen, setShareOpen] = useState(false);
-  const [fileTick, setFileTick] = useState(0);
+  const [liveDoc, setLiveDoc] = useState<Y.Doc | null>(null);
   const [notice, setNotice] = useState('');
   const [confirming, setConfirming] = useState(false);
   const isOwner = ownerId(document) === user.id;
@@ -300,10 +301,10 @@ function DocCanvas({
 
   return (
     <FileShare
-      documentId={document._id}
+      ydoc={liveDoc}
       userId={user.id}
+      userName={user.name}
       isOwner={isOwner}
-      refreshKey={fileTick}
       onNotice={setNotice}
       onActivity={() => onUpdated({ ...document, updatedAt: new Date().toISOString() })}
     >
@@ -373,7 +374,7 @@ function DocCanvas({
           onStatus={setStatus}
           onWords={setWords}
           onForbidden={setNotice}
-          onFilesChanged={() => setFileTick((current) => current + 1)}
+          onDocument={setLiveDoc}
         />
       </article>
 

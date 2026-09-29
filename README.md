@@ -120,7 +120,7 @@ The **+** button next to **Share** uploads one file to the current page.
 - Maximum size is 10 MB.
 - A page holds up to 40 files.
 - File bytes are stored in MongoDB, so both collaborators can open them after a refresh.
-- Images, plain text, and PDFs open in a new tab. Other types download.
+- Text and images open in the page. PDFs open in a new tab. Other types download.
 - Only members of the page can list or upload files. Removing a file is limited to the page owner and the person who shared it.
 
 A new or removed file is pushed to the open room with a `files-changed` event, so the list updates without a reload.

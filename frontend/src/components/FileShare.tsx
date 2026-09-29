@@ -3,12 +3,14 @@
 import { ChangeEvent, ReactNode, useEffect, useRef, useState } from 'react';
 import {
   deleteSharedFile,
+  downloadBlob,
+  fetchSharedFile,
   formatFileSize,
   listSharedFiles,
-  openSharedFile,
   uploadSharedFile,
   type SharedFileRecord,
 } from '@/lib/api';
+import { filePreviewKind, type FilePreviewKind } from '@/lib/sharedFile';
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -34,6 +36,8 @@ export default function FileShare({
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<SharedFileRecord[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<FilePreview | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,12 +90,43 @@ export default function FileShare({
     }
   }
 
+  function closePreview() {
+    setPreview((current) => {
+      if (current) URL.revokeObjectURL(current.url);
+      return null;
+    });
+  }
+
   async function open(file: SharedFileRecord) {
     onNotice('');
+    const kind = filePreviewKind(file);
+    const popup = kind === 'pdf' ? window.open('', '_blank') : null;
+    setOpeningId(file._id);
     try {
-      await openSharedFile(documentId, file);
+      const blob = await fetchSharedFile(documentId, file);
+      if (kind === 'download') {
+        popup?.close();
+        downloadBlob(blob, file.name);
+        return;
+      }
+      if (kind === 'pdf' && popup && !popup.closed) {
+        const url = URL.createObjectURL(blob);
+        popup.location.href = url;
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        return;
+      }
+      popup?.close();
+      const url = URL.createObjectURL(blob);
+      const text = kind === 'text' ? await blob.text() : undefined;
+      setPreview((current) => {
+        if (current) URL.revokeObjectURL(current.url);
+        return { name: file.name, kind, url, text, blob };
+      });
     } catch (err) {
+      popup?.close();
       onNotice(err instanceof Error ? err.message : 'Could not open that file');
+    } finally {
+      setOpeningId(null);
     }
   }
 
@@ -126,8 +161,13 @@ export default function FileShare({
           const canRemove = isOwner || file.uploadedBy._id === userId;
           return (
             <li key={file._id} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-ink-2 px-3 py-2">
-              <button type="button" onClick={() => void open(file)} className="min-w-0 flex-1 truncate text-left text-sm hover:text-saffron">
-                {file.name}
+              <button
+                type="button"
+                onClick={() => void open(file)}
+                disabled={openingId === file._id}
+                className="min-w-0 flex-1 truncate text-left text-sm hover:text-saffron disabled:opacity-60"
+              >
+                {openingId === file._id ? 'Opening…' : file.name}
               </button>
               <span className="shrink-0 text-xs text-mist">{formatFileSize(file.size)}</span>
               <span className="hidden shrink-0 text-xs text-mist sm:inline">{file.uploadedBy.name}</span>
@@ -143,5 +183,65 @@ export default function FileShare({
     </section>
   ) : null;
 
-  return children({ addButton, files: filesList });
+  return (
+    <>
+      {children({ addButton, files: filesList })}
+      {preview && (
+        <FilePreviewDialog
+          preview={preview}
+          onClose={closePreview}
+        />
+      )}
+    </>
+  );
+}
+
+interface FilePreview {
+  name: string;
+  kind: Exclude<FilePreviewKind, 'download'>;
+  url: string;
+  text?: string;
+  blob: Blob;
+}
+
+function FilePreviewDialog({ preview, onClose }: { preview: FilePreview; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-3 sm:items-center" onMouseDown={onClose}>
+      <div
+        role="dialog"
+        aria-labelledby="file-preview-title"
+        className="flex max-h-[90dvh] w-full max-w-4xl flex-col rounded-3xl bg-paper p-4 text-ink shadow-2xl sm:p-5"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <h2 id="file-preview-title" className="min-w-0 truncate font-serif text-2xl">{preview.name}</h2>
+          <div className="flex shrink-0 items-center gap-2">
+            <button type="button" onClick={() => downloadBlob(preview.blob, preview.name)} className="rounded-full border border-ink px-3 py-1.5 text-sm">
+              Download
+            </button>
+            <button type="button" onClick={onClose} className="rounded-full px-3 py-1.5 text-sm text-[#6f675d] hover:bg-[#efe8dc]">
+              Close
+            </button>
+          </div>
+        </div>
+        {preview.kind === 'text' && (
+          <pre className="min-h-40 flex-1 overflow-auto whitespace-pre-wrap rounded-2xl bg-white p-4 text-sm leading-relaxed">{preview.text}</pre>
+        )}
+        {preview.kind === 'image' && (
+          <img src={preview.url} alt={preview.name} className="mx-auto max-h-[70dvh] max-w-full rounded-2xl object-contain" />
+        )}
+        {preview.kind === 'pdf' && (
+          <iframe title={preview.name} src={preview.url} className="h-[70dvh] w-full rounded-2xl bg-white" />
+        )}
+      </div>
+    </div>
+  );
 }

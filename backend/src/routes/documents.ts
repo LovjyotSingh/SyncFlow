@@ -303,14 +303,15 @@ router.get('/:id/files/:fileId', async (req: AuthRequest, res: Response) => {
     if (!file) return res.status(404).json({ message: 'File not found' });
 
     const mime = file.mime || 'application/octet-stream';
+    const bytes = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data as Uint8Array);
     const ascii = file.name.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
     const disposition = PREVIEW_MIME.has(mime) ? 'inline' : 'attachment';
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Type', mime);
-    res.setHeader('Content-Length', String(file.size));
+    res.setHeader('Content-Length', String(bytes.length));
     res.setHeader('Content-Disposition', `${disposition}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(file.name)}`);
-    res.send(file.data);
+    res.end(bytes);
   } catch (error) {
     console.error('download file failed', error);
     res.status(500).json({ message: 'Could not open that file' });

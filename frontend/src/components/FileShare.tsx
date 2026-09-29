@@ -1,57 +1,60 @@
 'use client';
 
 import { ChangeEvent, ReactNode, useEffect, useRef, useState } from 'react';
+import type * as Y from 'yjs';
+import { downloadBlob, formatFileSize } from '@/lib/api';
 import {
-  deleteSharedFile,
-  downloadBlob,
-  fetchSharedFile,
-  formatFileSize,
-  listSharedFiles,
-  uploadSharedFile,
-  type SharedFileRecord,
-} from '@/lib/api';
+  deletePageFile,
+  listPageFiles,
+  looksLikeText,
+  MAX_FILE_BYTES,
+  readPageFile,
+  writePageFile,
+  type PageFile,
+} from '@/lib/pageFiles';
 import { filePreviewKind, type FilePreviewKind } from '@/lib/sharedFile';
 
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
-
 interface FileShareProps {
-  documentId: string;
+  ydoc: Y.Doc | null;
   userId: string;
+  userName: string;
   isOwner: boolean;
-  refreshKey: number;
   onNotice: (message: string) => void;
   onActivity: () => void;
   children: (parts: { addButton: ReactNode; files: ReactNode }) => ReactNode;
 }
 
 export default function FileShare({
-  documentId,
+  ydoc,
   userId,
+  userName,
   isOwner,
-  refreshKey,
   onNotice,
   onActivity,
   children,
 }: FileShareProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [files, setFiles] = useState<SharedFileRecord[]>([]);
+  const [files, setFiles] = useState<PageFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [preview, setPreview] = useState<FilePreview | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    void listSharedFiles(documentId)
-      .then((next) => {
-        if (!cancelled) setFiles(next);
-      })
-      .catch((err) => {
-        if (!cancelled) onNotice(err instanceof Error ? err.message : 'Could not load shared files');
-      });
+    if (!ydoc) {
+      setFiles([]);
+      return;
+    }
+    const sync = () => setFiles(listPageFiles(ydoc));
+    sync();
+    const meta = ydoc.getMap('shared-files');
+    const chunks = ydoc.getMap('shared-file-chunks');
+    meta.observeDeep(sync);
+    chunks.observeDeep(sync);
     return () => {
-      cancelled = true;
+      meta.unobserveDeep(sync);
+      chunks.unobserveDeep(sync);
     };
-  }, [documentId, onNotice, refreshKey]);
+  }, [ydoc]);
 
   async function onPick(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -61,16 +64,26 @@ export default function FileShare({
       onNotice('Choose a file to share');
       return;
     }
+    if (!ydoc) {
+      onNotice('Wait until the page is live, then share the file.');
+      return;
+    }
     if (file.size > MAX_FILE_BYTES) {
-      onNotice('Files must be 10 MB or smaller');
+      onNotice('Files must be 32 MB or smaller');
       return;
     }
 
     setUploading(true);
     onNotice('');
     try {
-      await uploadSharedFile(documentId, file);
-      setFiles(await listSharedFiles(documentId));
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      await writePageFile(ydoc, {
+        name: file.name,
+        mime: file.type,
+        bytes,
+        uploadedBy: userId,
+        uploadedByName: userName,
+      });
       onActivity();
     } catch (err) {
       onNotice(err instanceof Error ? err.message : 'Could not share that file');
@@ -79,11 +92,11 @@ export default function FileShare({
     }
   }
 
-  async function remove(file: SharedFileRecord) {
+  function remove(file: PageFile) {
+    if (!ydoc) return;
     onNotice('');
     try {
-      await deleteSharedFile(documentId, file._id);
-      setFiles((current) => current.filter((item) => item._id !== file._id));
+      deletePageFile(ydoc, file.id);
       onActivity();
     } catch (err) {
       onNotice(err instanceof Error ? err.message : 'Could not remove that file');
@@ -97,37 +110,40 @@ export default function FileShare({
     });
   }
 
-  async function open(file: SharedFileRecord) {
+  function open(file: PageFile) {
+    if (!ydoc) return;
     onNotice('');
-    const kind = filePreviewKind(file);
-    const popup = kind === 'pdf' ? window.open('', '_blank') : null;
-    setOpeningId(file._id);
-    try {
-      const blob = await fetchSharedFile(documentId, file);
-      if (kind === 'download') {
-        popup?.close();
-        downloadBlob(blob, file.name);
-        return;
-      }
-      if (kind === 'pdf' && popup && !popup.closed) {
-        const url = URL.createObjectURL(blob);
+    const bytes = readPageFile(ydoc, file.id);
+    if (!bytes) {
+      onNotice('That file is still syncing. Try again in a moment.');
+      return;
+    }
+    const namedKind = filePreviewKind(file);
+    const kind = namedKind === 'pdf' || namedKind === 'image'
+      ? namedKind
+      : (namedKind === 'text' || looksLikeText(bytes) ? 'text' : 'download');
+    const blob = new Blob([bytes], { type: kind === 'pdf' ? 'application/pdf' : (file.mime || 'application/octet-stream') });
+    if (kind === 'download') {
+      downloadBlob(blob, file.name);
+      return;
+    }
+    if (kind === 'pdf') {
+      const popup = window.open('', '_blank');
+      const url = URL.createObjectURL(blob);
+      if (popup && !popup.closed) {
         popup.location.href = url;
         window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
         return;
       }
-      popup?.close();
-      const url = URL.createObjectURL(blob);
-      const text = kind === 'text' ? await blob.text() : undefined;
-      setPreview((current) => {
-        if (current) URL.revokeObjectURL(current.url);
-        return { name: file.name, kind, url, text, blob };
-      });
-    } catch (err) {
-      popup?.close();
-      onNotice(err instanceof Error ? err.message : 'Could not open that file');
-    } finally {
-      setOpeningId(null);
     }
+    const url = URL.createObjectURL(blob);
+    const text = kind === 'text' ? new TextDecoder().decode(bytes) : undefined;
+    setOpeningId(file.id);
+    setPreview((current) => {
+      if (current) URL.revokeObjectURL(current.url);
+      return { name: file.name, kind, url, text, blob };
+    });
+    setOpeningId(null);
   }
 
   const addButton = (
@@ -135,9 +151,9 @@ export default function FileShare({
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        disabled={uploading}
+        disabled={uploading || !ydoc}
         aria-label={uploading ? 'Sharing file' : 'Share a file'}
-        title="Share a file"
+        title={ydoc ? 'Share a file' : 'Wait until the page is live'}
         className="grid h-9 w-9 place-items-center rounded-full bg-saffron text-ink disabled:opacity-60"
       >
         <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
@@ -158,19 +174,19 @@ export default function FileShare({
       <p className="mb-2 text-xs tracking-[0.18em] text-mist uppercase">Shared files</p>
       <ul className="flex max-h-40 flex-col gap-2 overflow-y-auto">
         {files.map((file) => {
-          const canRemove = isOwner || file.uploadedBy._id === userId;
+          const canRemove = isOwner || file.uploadedBy === userId;
           return (
-            <li key={file._id} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-ink-2 px-3 py-2">
+            <li key={file.id} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-ink-2 px-3 py-2">
               <button
                 type="button"
-                onClick={() => void open(file)}
-                disabled={openingId === file._id}
+                onClick={() => open(file)}
+                disabled={openingId === file.id}
                 className="min-w-0 flex-1 truncate text-left text-sm hover:text-saffron disabled:opacity-60"
               >
-                {openingId === file._id ? 'Opening…' : file.name}
+                {openingId === file.id ? 'Opening…' : file.name}
               </button>
               <span className="shrink-0 text-xs text-mist">{formatFileSize(file.size)}</span>
-              <span className="hidden shrink-0 text-xs text-mist sm:inline">{file.uploadedBy.name}</span>
+              <span className="hidden shrink-0 text-xs text-mist sm:inline">{file.uploadedByName}</span>
               {canRemove && (
                 <button type="button" onClick={() => void remove(file)} className="shrink-0 text-xs text-mist hover:text-paper">
                   Remove
@@ -233,7 +249,12 @@ function FilePreviewDialog({ preview, onClose }: { preview: FilePreview; onClose
           </div>
         </div>
         {preview.kind === 'text' && (
-          <pre className="min-h-40 flex-1 overflow-auto whitespace-pre-wrap rounded-2xl bg-white p-4 text-sm leading-relaxed">{preview.text}</pre>
+          <textarea
+            readOnly
+            value={preview.text}
+            aria-label={preview.name}
+            className="h-[70dvh] w-full flex-1 resize-none rounded-2xl bg-white p-4 font-mono text-sm leading-relaxed outline-none"
+          />
         )}
         {preview.kind === 'image' && (
           <img src={preview.url} alt={preview.name} className="mx-auto max-h-[70dvh] max-w-full rounded-2xl object-contain" />

@@ -23,7 +23,6 @@ interface ConnectOptions {
   onStatus: (status: 'connecting' | 'live' | 'offline') => void;
   onPresence: (users: PresenceUser[]) => void;
   onForbidden: (message: string) => void;
-  onFilesChanged?: () => void;
 }
 
 function toBase64(update: Uint8Array) {
@@ -52,7 +51,6 @@ export function connectDocument({
   onStatus,
   onPresence,
   onForbidden,
-  onFilesChanged,
 }: ConnectOptions) {
   let ready = false;
   const socket: Socket = io(BACKEND_URL, {
@@ -91,7 +89,6 @@ export function connectDocument({
   socket.on('connect_error', () => onStatus('offline'));
   socket.on('forbidden', (message: string) => onForbidden(message || 'You do not have access to this page'));
   socket.on('presence', (users: PresenceUser[]) => onPresence(users));
-  socket.on('files-changed', () => onFilesChanged?.());
   socket.on('y-sync', (update: string) => {
     if (update) Y.applyUpdate(ydoc, fromBase64(update), 'remote');
     ready = true;

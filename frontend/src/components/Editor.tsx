@@ -18,7 +18,7 @@ interface EditorProps {
   onStatus: (status: 'connecting' | 'live' | 'offline') => void;
   onWords: (words: number) => void;
   onForbidden: (message: string) => void;
-  onFilesChanged?: () => void;
+  onDocument?: (ydoc: Y.Doc | null) => void;
 }
 
 interface Session {
@@ -82,19 +82,19 @@ export default function Editor({
   onStatus,
   onWords,
   onForbidden,
-  onFilesChanged,
+  onDocument,
 }: EditorProps) {
   const [session, setSession] = useState<Session | null>(null);
   const onPresenceRef = useRef(onPresence);
   const onStatusRef = useRef(onStatus);
   const onForbiddenRef = useRef(onForbidden);
-  const onFilesChangedRef = useRef(onFilesChanged);
+  const onDocumentRef = useRef(onDocument);
 
   useEffect(() => {
     onPresenceRef.current = onPresence;
     onStatusRef.current = onStatus;
     onForbiddenRef.current = onForbidden;
-    onFilesChangedRef.current = onFilesChanged;
+    onDocumentRef.current = onDocument;
   });
 
   useEffect(() => {
@@ -108,16 +108,18 @@ export default function Editor({
       ydoc,
       awareness,
       onReady: () => {
-        if (!cancelled) setSession({ ydoc, awareness });
+        if (cancelled) return;
+        setSession({ ydoc, awareness });
+        onDocumentRef.current?.(ydoc);
       },
       onStatus: (status) => onStatusRef.current(status),
       onPresence: (users) => onPresenceRef.current(users),
       onForbidden: (message) => onForbiddenRef.current(message),
-      onFilesChanged: () => onFilesChangedRef.current?.(),
     });
 
     return () => {
       cancelled = true;
+      onDocumentRef.current?.(null);
       stop();
       ydoc.destroy();
     };

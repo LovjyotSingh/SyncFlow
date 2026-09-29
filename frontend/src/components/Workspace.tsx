@@ -21,6 +21,7 @@ import { ApiError, api, getAuthSnapshot, logout, subscribeAuth, type AuthUser } 
 import type { PresenceUser } from '@/lib/collab';
 import FileShare from './FileShare';
 import ShareDialog from './ShareDialog';
+import type { PageSurface } from './Editor';
 
 const Editor = dynamic(() => import('./Editor'), { ssr: false });
 
@@ -271,6 +272,7 @@ function DocCanvas({
   const [presence, setPresence] = useState<PresenceUser[]>([]);
   const [shareOpen, setShareOpen] = useState(false);
   const [liveDoc, setLiveDoc] = useState<Y.Doc | null>(null);
+  const [surface, setSurface] = useState<PageSurface | null>(null);
   const [notice, setNotice] = useState('');
   const [confirming, setConfirming] = useState(false);
   const isOwner = ownerId(document) === user.id;
@@ -307,6 +309,14 @@ function DocCanvas({
       isOwner={isOwner}
       onNotice={setNotice}
       onActivity={() => onUpdated({ ...document, updatedAt: new Date().toISOString() })}
+      onAddToSpace={(name, text) => {
+        if (!surface) {
+          setNotice('Wait until the page is live, then add the file.');
+          return false;
+        }
+        surface.addTextToSpace(name, text);
+        return true;
+      }}
     >
       {({ addButton, files }) => (
     <div className="px-4 py-4 sm:px-6 lg:px-10 lg:py-8">
@@ -375,6 +385,7 @@ function DocCanvas({
           onWords={setWords}
           onForbidden={setNotice}
           onDocument={setLiveDoc}
+          onSurface={setSurface}
         />
       </article>
 

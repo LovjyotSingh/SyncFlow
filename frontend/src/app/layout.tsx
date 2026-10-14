@@ -14,7 +14,7 @@ const fraunces = Fraunces({
 
 export const metadata: Metadata = {
   title: 'SyncFlow',
-  description: 'Real-time collaborative pages.',
+  description: 'Real-time collaborative workspace.',
 };
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {

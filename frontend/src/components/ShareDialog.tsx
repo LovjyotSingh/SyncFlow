@@ -87,9 +87,9 @@ export default function ShareDialog({ document, isOwner, onClose, onToken }: Sha
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 id="share-title" className="font-serif text-3xl">Share this page</h2>
-            <p className="mt-1 text-sm text-[#6f675d]">Anyone with the link can edit after they sign in.</p>
+            <p className="mt-1 text-sm text-mute">Anyone with the link can edit after they sign in.</p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-full px-3 py-1 text-sm text-[#6f675d] hover:bg-[#efe8dc]">Close</button>
+          <button type="button" onClick={onClose} className="rounded-full px-3 py-1 text-sm text-mute hover:bg-wash">Close</button>
         </div>
 
         <div className="mt-5 flex gap-2">
@@ -98,7 +98,7 @@ export default function ShareDialog({ document, isOwner, onClose, onToken }: Sha
             {copied ? 'Copied' : 'Copy'}
           </button>
         </div>
-        <p className="mt-2 text-xs text-[#6f675d]">They can paste this link into Connect to join the page.</p>
+        <p className="mt-2 text-xs text-mute">They can paste this link into Connect to join the page.</p>
 
         <form onSubmit={invite} className="mt-4 flex gap-2">
           <input
@@ -107,14 +107,14 @@ export default function ShareDialog({ document, isOwner, onClose, onToken }: Sha
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="Invite by email"
-            className="min-w-0 flex-1 rounded-xl border border-line bg-white px-3 py-2 text-sm outline-none focus:border-ink"
+            className="min-w-0 flex-1 rounded-xl border border-line bg-white px-3 py-2 text-sm outline-none focus:border-accent"
           />
           <button type="submit" disabled={pending} className="rounded-xl border border-ink px-4 py-2 text-sm">
             {pending ? '…' : 'Invite'}
           </button>
         </form>
 
-        {note && <p className="mt-3 text-sm text-[#2f5d50]">{note}</p>}
+        {note && <p className="mt-3 text-sm text-ok">{note}</p>}
         {error && <p className="mt-3 text-sm text-clay" role="alert">{error}</p>}
 
         <ul className="mt-5 space-y-2">
@@ -127,7 +127,7 @@ export default function ShareDialog({ document, isOwner, onClose, onToken }: Sha
           {people?.invitedEmails.map((address) => (
             <li key={address} className="flex items-center justify-between rounded-2xl bg-white px-3 py-2 text-sm">
               <span>{address}</span>
-              <span className="text-xs text-[#6f675d]">Invited</span>
+              <span className="text-xs text-mute">Invited</span>
             </li>
           ))}
         </ul>
@@ -151,10 +151,10 @@ function PersonRow({ person, label }: { person: { name: string; email: string; a
         </span>
         <span className="min-w-0">
           <span className="block truncate text-sm">{person.name}</span>
-          <span className="block truncate text-xs text-[#6f675d]">{person.email}</span>
+          <span className="block truncate text-xs text-mute">{person.email}</span>
         </span>
       </div>
-      <span className="text-xs text-[#6f675d]">{label}</span>
+      <span className="text-xs text-mute">{label}</span>
     </li>
   );
 }

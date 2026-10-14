@@ -156,7 +156,7 @@ export default function FileShare({
         disabled={uploading || !ydoc}
         aria-label={uploading ? 'Sharing file' : 'Share a file'}
         title={ydoc ? 'Share a file' : 'Wait until the page is live'}
-        className="grid h-9 w-9 place-items-center rounded-full bg-saffron text-ink disabled:opacity-60"
+        className="brand-fill grid h-9 w-9 place-items-center rounded-full disabled:opacity-60"
       >
         <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
           <path d="M8 2.5v11M2.5 8h11" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
@@ -183,7 +183,7 @@ export default function FileShare({
                 type="button"
                 onClick={() => open(file)}
                 disabled={openingId === file.id}
-                className="min-w-0 flex-1 truncate text-left text-sm hover:text-saffron disabled:opacity-60"
+                className="min-w-0 flex-1 truncate text-left text-sm hover:text-accent disabled:opacity-60"
               >
                 {openingId === file.id ? 'Opening…' : file.name}
               </button>
@@ -265,7 +265,7 @@ function FilePreviewDialog({
             <button type="button" onClick={() => downloadBlob(preview.blob, preview.name)} className="rounded-full border border-ink px-3 py-1.5 text-sm">
               Download
             </button>
-            <button type="button" onClick={onClose} className="rounded-full px-3 py-1.5 text-sm text-[#6f675d] hover:bg-[#efe8dc]">
+            <button type="button" onClick={onClose} className="rounded-full px-3 py-1.5 text-sm text-mute hover:bg-wash">
               Close
             </button>
           </div>

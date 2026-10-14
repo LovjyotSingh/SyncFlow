@@ -20,6 +20,7 @@ import { shareTokenFromInput } from '@/lib/shareLink';
 import { ApiError, api, getAuthSnapshot, logout, subscribeAuth, type AuthUser } from '@/lib/auth';
 import type { PresenceUser } from '@/lib/collab';
 import FileShare from './FileShare';
+import Logo from './Logo';
 import ShareDialog from './ShareDialog';
 import type { PageSurface } from './Editor';
 
@@ -35,8 +36,8 @@ function useMounted() {
 
 export function BootScreen() {
   return (
-    <div className="grid min-h-dvh place-items-center bg-ink text-paper">
-      <p className="font-serif text-3xl">SyncFlow</p>
+    <div className="grid min-h-dvh place-items-center bg-ink px-6 text-paper">
+      <Logo size="lg" />
     </div>
   );
 }
@@ -154,8 +155,8 @@ export default function Workspace() {
       <aside className={`fixed inset-y-0 left-0 z-40 flex w-[292px] flex-col border-r border-white/10 bg-ink transition-transform lg:static lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center justify-between px-5 pt-5">
           <div>
-            <p className="font-serif text-2xl leading-none">SyncFlow</p>
-            <p className="mt-1 text-xs tracking-[0.18em] text-mist uppercase">Pages</p>
+            <Logo size="sm" />
+            <p className="mt-2 text-xs tracking-[0.18em] text-mist uppercase">Pages</p>
           </div>
           <button type="button" onClick={() => setMenuOpen(false)} className="text-sm text-mist lg:hidden">Close</button>
         </div>
@@ -163,7 +164,7 @@ export default function Workspace() {
           <button
             type="button"
             onClick={() => void makePage()}
-            className="flex w-full items-center justify-between rounded-2xl bg-saffron px-4 py-3 text-sm font-medium text-ink"
+            className="brand-fill flex w-full items-center justify-between rounded-2xl px-4 py-3 text-sm font-semibold"
           >
             New page
             <kbd className="rounded-md bg-ink/10 px-1.5 py-0.5 text-[11px]">N</kbd>
@@ -172,7 +173,7 @@ export default function Workspace() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search pages"
-            className="mt-3 w-full rounded-2xl border border-white/10 bg-ink-2 px-3 py-2.5 text-sm outline-none placeholder:text-mist focus:border-saffron"
+            className="mt-3 w-full rounded-2xl border border-white/10 bg-ink-2 px-3 py-2.5 text-sm outline-none placeholder:text-mist focus:border-accent"
           />
           <div className="mt-3">
             <ConnectForm onConnect={connectWithToken} />
@@ -190,7 +191,7 @@ export default function Workspace() {
                 key={document._id}
                 type="button"
                 onClick={() => openPage(document._id)}
-                className={`w-full rounded-2xl px-3 py-3 text-left ${selected ? 'bg-white/10 ring-1 ring-saffron/50' : 'hover:bg-white/5'}`}
+                className={`w-full rounded-2xl px-3 py-3 text-left ${selected ? 'bg-white/10 ring-1 ring-accent/50' : 'hover:bg-white/5'}`}
               >
                 <span className="block truncate text-sm">{document.title || 'Untitled'}</span>
                 <span className="mt-1 block text-xs text-mist">
@@ -208,7 +209,7 @@ export default function Workspace() {
             <span className="block truncate text-sm">{user.name}</span>
             <span className="block truncate text-xs text-mist">{user.email}</span>
           </span>
-          <button type="button" onClick={signOut} className="text-sm text-saffron">Sign out</button>
+          <button type="button" onClick={signOut} className="text-sm text-accent">Sign out</button>
         </div>
       </aside>
 
@@ -217,9 +218,13 @@ export default function Workspace() {
           <button type="button" onClick={() => setMenuOpen(true)} className="rounded-full border border-white/15 px-3 py-1.5 text-sm">
             Pages
           </button>
-          <p className="truncate font-serif text-lg">{active?.title || 'SyncFlow'}</p>
+          {active ? (
+            <p className="truncate font-serif text-lg">{active.title || 'Untitled'}</p>
+          ) : (
+            <Logo size="sm" />
+          )}
         </header>
-        {error && <p className="mx-4 mt-3 rounded-2xl bg-[#3a221c] px-4 py-3 text-sm text-[#f3c2b6] lg:mx-10">{error}</p>}
+        {error && <p className="mx-4 mt-3 rounded-2xl bg-[#2a1624] px-4 py-3 text-sm text-[#f6c6d4] lg:mx-10">{error}</p>}
         {active ? (
           <DocCanvas
             key={active._id}
@@ -244,7 +249,7 @@ export default function Workspace() {
               <div className="mt-6 text-left">
                 <ConnectForm onConnect={connectWithToken} />
               </div>
-              <button type="button" onClick={() => void makePage()} className="mt-4 rounded-full bg-saffron px-5 py-3 text-sm font-medium text-ink">
+              <button type="button" onClick={() => void makePage()} className="brand-fill mt-4 rounded-full px-5 py-3 text-sm font-semibold">
                 New page
               </button>
             </div>
@@ -322,8 +327,8 @@ function DocCanvas({
     <div className="px-4 py-4 sm:px-6 lg:px-10 lg:py-8">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 text-sm text-mist">
-          <span className={`inline-flex items-center gap-2 ${status === 'live' ? 'text-[#b7d7a8]' : ''}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${status === 'live' ? 'bg-[#b7d7a8]' : 'bg-saffron'}`} />
+          <span className={`inline-flex items-center gap-2 ${status === 'live' ? 'text-live' : ''}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${status === 'live' ? 'bg-live' : 'bg-accent'}`} />
             {statusLabel}
           </span>
           <span>{words} {words === 1 ? 'word' : 'words'}</span>
@@ -365,18 +370,18 @@ function DocCanvas({
           {others.map((person) => person.name).join(', ')} {others.length === 1 ? 'is' : 'are'} here
         </p>
       )}
-      {notice && <p className="mb-3 text-sm text-[#f3c2b6]">{notice}</p>}
+      {notice && <p className="mb-3 text-sm text-[#f6c6d4]">{notice}</p>}
       {files}
 
-      <article className="mx-auto min-h-[72dvh] max-w-3xl rounded-[28px] bg-paper px-5 py-7 text-ink shadow-[0_30px_80px_rgba(0,0,0,0.28)] sm:px-10 sm:py-10">
+      <article className="mx-auto min-h-[72dvh] max-w-3xl rounded-[28px] bg-paper px-5 py-7 text-ink shadow-[0_30px_80px_rgba(4,10,30,0.45)] sm:px-10 sm:py-10">
         <input
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           aria-label="Page title"
-          className="w-full bg-transparent font-serif text-4xl leading-tight outline-none placeholder:text-[#c8bbaa] sm:text-5xl"
+          className="w-full bg-transparent font-serif text-4xl leading-tight outline-none placeholder:text-[#b7c3d6] sm:text-5xl"
           placeholder="Untitled"
         />
-        <p className="mt-2 mb-6 text-sm text-[#8a7f72]">Type / for headings, lists, and quotes.</p>
+        <p className="mt-2 mb-6 text-sm text-mute">Type / for headings, lists, and quotes.</p>
         <Editor
           documentId={document._id}
           user={user}
@@ -439,13 +444,13 @@ function ConnectForm({ onConnect }: { onConnect: (token: string) => Promise<void
           value={value}
           onChange={(event) => setValue(event.target.value)}
           placeholder="Paste a shared link"
-          className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-ink-2 px-3 py-2.5 text-sm outline-none placeholder:text-mist focus:border-saffron"
+          className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-ink-2 px-3 py-2.5 text-sm outline-none placeholder:text-mist focus:border-accent"
         />
         <button type="submit" disabled={pending} className="rounded-2xl bg-white/10 px-3 text-sm text-paper disabled:opacity-60">
           {pending ? '…' : 'Join'}
         </button>
       </div>
-      {error && <p className="mt-2 text-xs text-[#f3c2b6]" role="alert">{error}</p>}
+      {error && <p className="mt-2 text-xs text-[#f6c6d4]" role="alert">{error}</p>}
     </form>
   );
 }

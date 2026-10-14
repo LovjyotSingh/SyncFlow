@@ -1,12 +1,20 @@
-# Render deployment config
+# Prefer the repository-root render.yaml. Render does not read this copy.
+# Kept so a service whose root directory is backend still documents the same settings.
 services:
   - type: web
     name: syncflow-backend
-    env: node
+    runtime: node
     buildCommand: npm install && npm run build
     startCommand: npm start
+    healthCheckPath: /api/health
     envVars:
-      - key: PORT
-        value: 10000
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: "22.22.0"
+      - key: MONGODB_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false

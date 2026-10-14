@@ -146,7 +146,7 @@ node --experimental-strip-types --test src/lib/shareLink.test.ts
 
 The frontend is a Next.js app and can be deployed on Vercel. Set `NEXT_PUBLIC_BACKEND_URL` to the public API origin. The value is read in the browser, so it must be reachable from the people using the demo.
 
-The API is a long-running Node server because of Socket.io. `backend/render.yaml` is a starting point for Render. Set `MONGODB_URI`, `REDIS_URL`, and `JWT_SECRET` in the host’s environment. Point MongoDB Atlas and your Redis provider at those variables. Network access on the database must allow the API host.
+The API is a long-running Node server because of Socket.io. `render.yaml` at the repository root is the Render blueprint, with the service root directory set to `backend`. The process listens on `0.0.0.0` and `PORT`. `GET /` and `GET /api/health` both return 200 so Render's health check can pass. Set `MONGODB_URI`, `REDIS_URL`, and `JWT_SECRET` in the host’s environment. Point MongoDB Atlas and your Redis provider at those variables. Network access on the database must allow the API host. Node 22 is required.
 
 A split deploy only works when the API allows the frontend origin. The server currently reflects the request origin in CORS.
 

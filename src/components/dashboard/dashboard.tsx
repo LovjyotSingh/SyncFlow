@@ -110,7 +110,7 @@ export function Dashboard({ user, initialPages }: { user: SessionUser; initialPa
               <Link2 className="size-4" /> <span className="hidden sm:inline">Join with link</span>
             </Button>
             <Button variant="primary" size="sm" onClick={createPage} loading={creating} className="h-9 rounded-lg px-3.5">
-              {creating ? null : <Plus className="size-4" />} New page
+              {creating ? null : <Plus className="size-4" />} <span className="max-[400px]:sr-only">New page</span>
               <kbd className="ml-1 hidden rounded border border-black/15 px-1 font-mono text-[11px] text-black/50 sm:inline">N</kbd>
             </Button>
             <div className="ml-1">

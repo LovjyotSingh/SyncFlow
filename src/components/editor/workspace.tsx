@@ -164,7 +164,7 @@ export function Workspace({ user, page, filesEnabled }: { user: SessionUser; pag
               {fileCount > 0 ? <span className="font-mono text-xs">{fileCount}</span> : null}
             </Button>
             <Button variant="primary" size="sm" className="h-9 rounded-lg px-3.5" onClick={() => setShareOpen(true)}>
-              <Share2 className="size-3.5" /> Share
+              <Share2 className="size-3.5" /> <span className="max-[400px]:sr-only">Share</span>
             </Button>
             <Menu>
               <MenuTrigger className={buttonClass("ghost", "icon", "size-9")} aria-label="More options">

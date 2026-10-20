@@ -143,7 +143,7 @@ export function Workspace({ user, page, filesEnabled }: { user: SessionUser; pag
         <div className="flex h-14 items-center gap-2 px-3 sm:px-5">
           <Link
             href="/app"
-            className="flex items-center gap-2 rounded-lg py-1 pr-2 pl-1 text-muted transition-colors hover:bg-white/5 hover:text-ink"
+            className="flex items-center gap-2 rounded-lg py-1 pr-2 pl-1 text-muted transition-colors hover:bg-white/5 hover:text-ink pointer-coarse:py-2"
             aria-label="Back to your pages"
           >
             <ArrowLeft className="size-4" />

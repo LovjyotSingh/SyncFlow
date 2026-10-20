@@ -111,9 +111,9 @@ export function ShareDialog({
       description="Anyone with the link can edit after they sign in."
       className="max-w-lg"
     >
-      <div className="flex gap-2">
-        <Input readOnly value={link} aria-label="Share link" onFocus={(e) => e.currentTarget.select()} className="font-mono text-[13px]" />
-        <Button variant="primary" onClick={copy} className="h-11 w-28 rounded-xl">
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input readOnly value={link} aria-label="Share link" onFocus={(e) => e.currentTarget.select()} className="font-mono text-[13px] pointer-coarse:text-base" />
+        <Button variant="primary" onClick={copy} className="h-11 w-full rounded-xl sm:w-28">
           {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
           {copied ? "Copied" : "Copy"}
         </Button>
@@ -131,7 +131,7 @@ export function ShareDialog({
               </button>
             </>
           ) : (
-            <button onClick={() => setConfirmReset(true)} className="inline-flex items-center gap-1.5 text-dim transition-colors hover:text-ink">
+            <button onClick={() => setConfirmReset(true)} className="inline-flex items-center gap-1.5 text-dim transition-colors hover:text-ink pointer-coarse:py-2">
               <RotateCcw className="size-3.5" /> Reset link
             </button>
           )}
@@ -168,7 +168,7 @@ export function ShareDialog({
                   {isOwner && m.role !== "owner" ? (
                     <button
                       onClick={() => remove({ userId: m.id })}
-                      className="grid size-7 place-items-center rounded-lg text-dim hover:bg-white/5 hover:text-bad"
+                      className="grid size-7 place-items-center rounded-lg text-dim hover:bg-white/5 hover:text-bad pointer-coarse:size-10"
                       aria-label={`Remove ${m.name}`}
                     >
                       <X className="size-3.5" />
@@ -184,7 +184,7 @@ export function ShareDialog({
               {isOwner ? (
                 <button
                   onClick={() => remove({ email: i.email })}
-                  className="grid size-7 place-items-center rounded-lg text-dim hover:bg-white/5 hover:text-bad"
+                  className="grid size-7 place-items-center rounded-lg text-dim hover:bg-white/5 hover:text-bad pointer-coarse:size-10"
                   aria-label={`Cancel invite for ${i.email}`}
                 >
                   <X className="size-3.5" />

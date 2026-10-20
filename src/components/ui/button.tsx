@@ -14,11 +14,12 @@ const variants: Record<Variant, string> = {
   danger: "border border-bad/30 text-bad hover:bg-bad/10",
 };
 
+// On touch screens every size grows to a comfortable thumb target (40–44 px).
 const sizes: Record<Size, string> = {
-  sm: "h-8 px-3 text-[13px] gap-1.5 rounded-lg",
-  md: "h-10 px-4 text-sm gap-2 rounded-xl",
+  sm: "h-8 px-3 text-[13px] gap-1.5 rounded-lg pointer-coarse:h-10 pointer-coarse:px-3.5",
+  md: "h-10 px-4 text-sm gap-2 rounded-xl pointer-coarse:h-11",
   lg: "h-12 px-6 text-[15px] gap-2.5 rounded-full",
-  icon: "size-9 rounded-lg",
+  icon: "size-9 rounded-lg pointer-coarse:size-11",
 };
 
 export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {

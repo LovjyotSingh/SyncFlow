@@ -100,7 +100,7 @@ export function FilesPanel({
       <D.Portal>
         <D.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] data-[state=open]:animate-fade" />
         <D.Content
-          className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[420px] flex-col border-l border-line2 bg-s1 shadow-[0_0_120px_rgb(0_0_0/0.9)] outline-none data-[state=open]:animate-[sf-slide_0.45s_var(--ease-out-expo)]"
+          className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[420px] flex-col pb-[env(safe-area-inset-bottom)] border-l border-line2 bg-s1 shadow-[0_0_120px_rgb(0_0_0/0.9)] outline-none data-[state=open]:animate-[sf-slide_0.45s_var(--ease-out-expo)]"
           onDragOver={(e) => {
             e.preventDefault();
             setDragging(true);
@@ -117,7 +117,7 @@ export function FilesPanel({
               <D.Title className="font-semibold tracking-tight">Files on this page</D.Title>
               <D.Description className="text-xs text-dim">Everyone on the page can open these. Up to 10 MB each.</D.Description>
             </div>
-            <D.Close className="grid size-8 place-items-center rounded-lg text-dim hover:bg-white/5 hover:text-ink" aria-label="Close">
+            <D.Close className="grid size-8 place-items-center rounded-lg text-dim hover:bg-white/5 hover:text-ink pointer-coarse:size-10" aria-label="Close">
               <X className="size-4" />
             </D.Close>
           </div>
@@ -133,7 +133,16 @@ export function FilesPanel({
               )}
             >
               <Upload className="size-5 text-muted" />
-              <span className="text-sm font-medium">{enabled ? "Drop files or click to upload" : "File sharing isn't set up yet"}</span>
+              <span className="text-sm font-medium">
+                {enabled ? (
+                  <>
+                    <span className="pointer-coarse:hidden">Drop files or click to upload</span>
+                    <span className="hidden pointer-coarse:inline">Tap to upload a file</span>
+                  </>
+                ) : (
+                  "File sharing isn't set up yet"
+                )}
+              </span>
               <span className="text-xs text-dim">
                 {enabled ? "Images, PDFs, docs and code" : "The owner of this deployment needs to connect Vercel Blob."}
               </span>
@@ -171,7 +180,7 @@ export function FilesPanel({
                             {formatBytes(f.size)} · {f.uploaderName ?? "Someone"} · {timeAgo(f.createdAt)}
                           </span>
                         </div>
-                        <div className="flex opacity-60 transition-opacity group-hover:opacity-100">
+                        <div className="flex opacity-60 transition-opacity group-hover:opacity-100 pointer-coarse:opacity-100">
                           {kind === "text" || kind === "image" ? (
                             <IconButton label="Add to page" onClick={() => insert(f)}>
                               <Plus />
@@ -181,7 +190,7 @@ export function FilesPanel({
                             href={f.url}
                             target="_blank"
                             rel="noopener"
-                            className="grid size-8 place-items-center rounded-lg text-dim hover:bg-white/5 hover:text-ink"
+                            className="grid size-8 place-items-center rounded-lg text-dim hover:bg-white/5 hover:text-ink pointer-coarse:size-10"
                             aria-label={kind === "other" ? "Download" : "Open"}
                           >
                             {kind === "other" ? <Download className="size-4" /> : <ExternalLink className="size-4" />}
@@ -210,7 +219,7 @@ function IconButton({ label, onClick, danger, children }: { label: string; onCli
       aria-label={label}
       title={label}
       className={cn(
-        "grid size-8 place-items-center rounded-lg text-dim hover:bg-white/5 [&>svg]:size-4",
+        "grid size-8 place-items-center rounded-lg text-dim hover:bg-white/5 [&>svg]:size-4 pointer-coarse:size-10",
         danger ? "hover:text-bad" : "hover:text-ink",
       )}
     >

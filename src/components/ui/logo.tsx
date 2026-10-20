@@ -21,7 +21,7 @@ export function LogoMark({ className }: { className?: string }) {
 
 export function Logo({ href = "/", className }: { href?: string; className?: string }) {
   return (
-    <Link href={href} className={cn("inline-flex items-center gap-2.5 font-semibold tracking-tight", className)}>
+    <Link href={href} className={cn("inline-flex items-center gap-2.5 font-semibold tracking-tight pointer-coarse:py-2", className)}>
       <LogoMark />
       <span className="text-[17px]">SyncFlow</span>
     </Link>

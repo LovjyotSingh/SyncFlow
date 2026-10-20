@@ -9,7 +9,8 @@ export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTML
     <input
       ref={ref}
       className={cn(
-        "h-11 w-full rounded-xl border border-line2 bg-s1 px-3.5 text-[15px] text-ink placeholder:text-dim",
+        // 16px on touch screens so iOS Safari doesn't zoom the page when the field is focused.
+        "h-11 w-full rounded-xl border border-line2 bg-s1 px-3.5 text-[15px] text-ink placeholder:text-dim pointer-coarse:text-base",
         "transition-colors outline-none focus:border-c3 focus:ring-4 focus:ring-c3/15",
         "aria-[invalid=true]:border-bad/60",
         className,

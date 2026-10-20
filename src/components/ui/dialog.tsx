@@ -38,7 +38,7 @@ export function Dialog({
               {description ? <D.Description className="mt-1 text-sm text-muted">{description}</D.Description> : null}
             </div>
             <D.Close
-              className="-mt-1 -mr-2 grid size-8 place-items-center rounded-lg text-dim transition-colors hover:bg-white/5 hover:text-ink"
+              className="-mt-1 -mr-2 grid size-8 place-items-center rounded-lg text-dim transition-colors hover:bg-white/5 hover:text-ink pointer-coarse:size-10"
               aria-label="Close"
             >
               <X className="size-4" />

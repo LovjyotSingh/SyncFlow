@@ -48,7 +48,7 @@ export function ConnectDialog({ open, onOpenChange }: { open: boolean; onOpenCha
           placeholder="https://…/join/abc123"
           aria-label="Share link"
           aria-invalid={Boolean(error)}
-          className="font-mono text-sm"
+          className="font-mono text-sm pointer-coarse:text-base"
         />
         {error ? <p role="alert" className="text-sm text-bad">{error}</p> : null}
         <div className="flex justify-end gap-2">

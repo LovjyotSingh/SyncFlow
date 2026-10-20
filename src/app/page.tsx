@@ -216,12 +216,12 @@ export default async function Home() {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4">
           <span>
             Built by{" "}
-            <a href={PORTFOLIO} target="_blank" rel="noopener" className="text-muted transition-colors hover:text-ink">
+            <a href={PORTFOLIO} target="_blank" rel="noopener" className="text-muted transition-colors hover:text-ink pointer-coarse:inline-block pointer-coarse:py-2">
               Lovjyot Singh
             </a>
           </span>
           <span className="flex gap-5">
-            <a href={REPO} target="_blank" rel="noopener" className="transition-colors hover:text-ink">Source on GitHub</a>
+            <a href={REPO} target="_blank" rel="noopener" className="transition-colors hover:text-ink pointer-coarse:py-2">Source on GitHub</a>
             <span>© 2026</span>
           </span>
         </div>

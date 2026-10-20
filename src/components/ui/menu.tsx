@@ -39,7 +39,7 @@ export function MenuItem({
     <M.Item
       onSelect={onSelect}
       className={cn(
-        "flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm outline-none select-none",
+        "flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm outline-none select-none pointer-coarse:py-3",
         danger ? "text-bad data-[highlighted]:bg-bad/10" : "text-ink data-[highlighted]:bg-white/[0.06]",
       )}
     >

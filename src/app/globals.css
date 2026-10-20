@@ -170,6 +170,12 @@ body {
   color: #000;
 }
 
+/* Pause decorative animations that are scrolled out of view. */
+.sf-halo[data-paused] *,
+[data-offscreen] * {
+  animation-play-state: paused !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

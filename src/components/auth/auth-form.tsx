@@ -86,7 +86,7 @@ export function AuthForm({ mode, next }: { mode: "login" | "signup"; next: strin
 
       <p className="text-center text-sm text-muted">
         {isSignup ? "Already have an account?" : "New to SyncFlow?"}{" "}
-        <Link href={otherHref} className="font-medium text-ink underline-offset-4 hover:underline">
+        <Link href={otherHref} className="font-medium text-ink underline-offset-4 hover:underline pointer-coarse:inline-block pointer-coarse:py-2">
           {isSignup ? "Sign in" : "Create an account"}
         </Link>
       </p>

@@ -101,7 +101,7 @@ export function Dashboard({ user, initialPages }: { user: SessionUser; initialPa
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search pages"
               aria-label="Search pages"
-              className="h-9 w-full rounded-lg border border-line bg-s1 pr-10 pl-9 text-sm outline-none placeholder:text-dim focus:border-line2"
+              className="h-9 w-full rounded-lg border border-line bg-s1 pr-10 pl-9 text-sm outline-none placeholder:text-dim focus:border-line2 pointer-coarse:h-10 pointer-coarse:text-base"
             />
             <kbd className="absolute top-1/2 right-2 -translate-y-1/2 rounded border border-line2 px-1.5 font-mono text-[11px] text-dim">/</kbd>
           </div>
@@ -118,6 +118,20 @@ export function Dashboard({ user, initialPages }: { user: SessionUser; initialPa
             </div>
           </div>
         </div>
+        {/* Phones get search on its own row instead of squeezing it into the header. */}
+        {pages.length > 0 ? (
+          <div className="relative px-5 pb-3 sm:hidden">
+            <Search className="pointer-events-none absolute top-1/2 left-8 size-4 -translate-y-[calc(50%+6px)] text-dim" />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search pages"
+              aria-label="Search pages"
+              className="h-11 w-full rounded-xl border border-line bg-s1 pr-3 pl-10 text-base outline-none placeholder:text-dim focus:border-line2"
+            />
+          </div>
+        ) : null}
       </header>
 
       <main className="mx-auto max-w-6xl px-5 pt-14 pb-24">
@@ -141,7 +155,7 @@ export function Dashboard({ user, initialPages }: { user: SessionUser; initialPa
                   aria-selected={filter === f}
                   onClick={() => setFilter(f)}
                   className={cn(
-                    "rounded-full px-3.5 py-1.5 text-sm capitalize transition-colors",
+                    "rounded-full px-3.5 py-1.5 text-sm capitalize transition-colors pointer-coarse:px-4 pointer-coarse:py-2.5",
                     filter === f ? "bg-ink font-medium text-black" : "text-muted hover:text-ink",
                   )}
                 >
@@ -157,8 +171,9 @@ export function Dashboard({ user, initialPages }: { user: SessionUser; initialPa
         ) : visible.length === 0 ? (
           <p className="mt-16 text-center text-muted">No pages match “{query}”.</p>
         ) : (
-          <ul className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <li>
+          <ul className="mt-8 grid grid-cols-1 gap-4 sm:mt-10 sm:grid-cols-2 lg:grid-cols-3">
+            {/* On phones the header's New page button is enough; skip the big tile. */}
+            <li className="max-sm:hidden">
               <button
                 onClick={createPage}
                 className="group flex h-full min-h-[208px] w-full flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-line2 text-muted transition-colors hover:border-white/30 hover:bg-white/[0.02] hover:text-ink"
@@ -212,10 +227,11 @@ function PageCard({ page, onRemove }: { page: PageSummary; onRemove: () => void 
           </span>
         </div>
       </Link>
-      <div className="absolute top-7 right-7 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+      {/* Shown on hover with a mouse; always visible on touch screens, which have no hover. */}
+      <div className="absolute top-7 right-7 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100">
         <Menu>
           <MenuTrigger
-            className="grid size-8 place-items-center rounded-lg border border-line2 bg-black/70 text-muted backdrop-blur hover:text-ink"
+            className="grid size-8 place-items-center rounded-lg border border-line2 bg-black/70 text-muted backdrop-blur hover:text-ink pointer-coarse:size-10"
             aria-label={`Options for ${page.title}`}
           >
             <MoreHorizontal className="size-4" />

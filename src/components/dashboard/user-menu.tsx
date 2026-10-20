@@ -16,7 +16,10 @@ export function UserMenu({ user }: { user: SessionUser }) {
   }
   return (
     <Menu>
-      <MenuTrigger className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-c1" aria-label="Account">
+      <MenuTrigger
+        className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-c1 pointer-coarse:-m-1.5 pointer-coarse:p-1.5"
+        aria-label="Account"
+      >
         <Avatar name={user.name} color={colorFor(user.id)} size={32} />
       </MenuTrigger>
       <MenuContent>

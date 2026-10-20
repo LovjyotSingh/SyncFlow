@@ -1,0 +1,181 @@
+@import "tailwindcss";
+
+/* SyncFlow: pure black, hairline structure, and one ember-to-violet spectrum shared with
+   lovjyotsingh.github.io. The app is dark-only by design. */
+@theme {
+  --color-bg: #000000;
+  --color-s1: #0a0a0b;
+  --color-s2: #111113;
+  --color-s3: #18181b;
+  --color-s4: #222226;
+  --color-line: rgb(255 255 255 / 0.08);
+  --color-line2: rgb(255 255 255 / 0.14);
+  --color-ink: #f5f5f7;
+  --color-muted: #a1a1aa;
+  --color-dim: #6b6b74;
+  --color-c1: #ff8a3d;
+  --color-c2: #ff3d81;
+  --color-c3: #8b5cff;
+  --color-c4: #3d8bff;
+  --color-ok: #34d399;
+  --color-warn: #fbbf24;
+  --color-bad: #f87171;
+
+  --font-sans: var(--font-geist), "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+  --font-serif: var(--font-instrument), "Iowan Old Style", Georgia, serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "Cascadia Code", Consolas, monospace;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --animate-rise: rise 0.9s var(--ease-out-expo) both;
+  --animate-fade: fade 0.6s ease both;
+  --animate-spin-slow: spin 28s linear infinite;
+  --animate-pulse-ring: pulse-ring 2.4s var(--ease-out-expo) infinite;
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(18px); }
+  }
+  @keyframes fade {
+    from { opacity: 0; }
+  }
+  @keyframes pulse-ring {
+    0% { transform: scale(1); opacity: 0.7; }
+    100% { transform: scale(3); opacity: 0; }
+  }
+}
+
+:root {
+  color-scheme: dark;
+  --grad: linear-gradient(95deg, var(--color-c1), var(--color-c2) 50%, var(--color-c3));
+  --spectrum: conic-gradient(from 0deg, var(--color-c1), var(--color-c2), var(--color-c3), var(--color-c4), var(--color-c3), var(--color-c2), var(--color-c1));
+}
+
+html {
+  background: var(--color-bg);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: clip;
+}
+
+::selection {
+  background: var(--color-c2);
+  color: #000;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-c1);
+  outline-offset: 2px;
+}
+
+@layer components {
+  .text-grad {
+    background: var(--grad);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .serif-accent {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-dim);
+  }
+  /* A card whose border lights up under the cursor (set --mx/--my from JS). */
+  .glow-card {
+    position: relative;
+    isolation: isolate;
+  }
+  .glow-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s;
+    background: radial-gradient(360px circle at var(--mx, 50%) var(--my, 0%), rgb(255 255 255 / 0.5), rgb(255 61 129 / 0.22) 30%, transparent 60%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    z-index: 2;
+  }
+  .glow-card:hover::before {
+    opacity: 1;
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-s4) transparent;
+  }
+}
+
+/* ---------- BlockNote on black ---------- */
+.sf-editor .bn-container {
+  --bn-font-family: var(--font-sans);
+  --bn-border-radius-small: 6px;
+  --bn-border-radius-medium: 10px;
+  --bn-border-radius-large: 14px;
+}
+.sf-editor .bn-editor,
+.sf-editor .bn-default-styles {
+  font-family: var(--font-sans);
+}
+.sf-editor .bn-editor {
+  padding-inline: 54px 0;
+  background: transparent;
+  font-size: 17px;
+  line-height: 1.7;
+}
+@media (max-width: 640px) {
+  .sf-editor .bn-editor {
+    padding-inline: 28px 0;
+    font-size: 16px;
+  }
+}
+.sf-editor .bn-block-content[data-content-type="heading"] h1,
+.sf-editor .bn-block-content[data-content-type="heading"] h2,
+.sf-editor .bn-block-content[data-content-type="heading"] h3 {
+  letter-spacing: -0.03em;
+}
+.sf-editor [data-placeholder]::before,
+.sf-editor .bn-inline-content:has(> .ProseMirror-trailingBreak:only-child)::before {
+  color: var(--color-dim) !important;
+}
+/* Remote cursors from y-prosemirror */
+.sf-editor .collaboration-cursor__caret {
+  border-left-width: 2px;
+  margin-inline: -1px;
+}
+.sf-editor .collaboration-cursor__label {
+  border-radius: 6px 6px 6px 0;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 11px;
+  padding: 2px 6px;
+  color: #000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

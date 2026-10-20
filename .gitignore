@@ -47,5 +47,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# keep the documented example even though .env* is ignored above
+.env*
+# keep the documented example even though .env* is ignored
 !.env.example

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { LogOut, Home } from "lucide-react";
+import { LogOut, Home, Settings } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import type { SessionUser } from "@/lib/auth";
@@ -30,6 +30,9 @@ export function UserMenu({ user }: { user: SessionUser }) {
         <MenuSeparator />
         <MenuItem icon={<Home />} onSelect={() => router.push("/")}>
           Home page
+        </MenuItem>
+        <MenuItem icon={<Settings />} onSelect={() => router.push("/settings")}>
+          Settings
         </MenuItem>
         <MenuItem icon={<LogOut />} onSelect={signOut}>
           Sign out

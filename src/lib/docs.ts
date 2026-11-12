@@ -185,7 +185,9 @@ export async function listMembers(docId: string): Promise<{ members: Member[]; i
 /** Adds an existing account right away; otherwise keeps the invite until that email signs up. */
 export async function inviteByEmail(docId: string, email: string, invitedBy: string): Promise<"added" | "invited"> {
   const db = await getDb();
-  const users = await db.query("SELECT id FROM users WHERE email = $1::text", [email]);
+  // Only confirmed accounts are added right away; otherwise the invite waits until
+  // someone proves they own this address.
+  const users = await db.query("SELECT id FROM users WHERE email = $1::text AND email_verified", [email]);
   if (users[0]) {
     await db.query(
       `INSERT INTO members (document_id, user_id, role) VALUES ($1::uuid, $2::uuid, 'editor')

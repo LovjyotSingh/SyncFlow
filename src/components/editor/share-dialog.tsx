@@ -68,7 +68,7 @@ export function ShareDialog({
       });
       setPeople(res);
       toast.success(
-        res.result === "added" ? `${email} can now open this page.` : `Invite saved. ${email} joins as soon as they sign up.`,
+        res.result === "added" ? `${email} can now open this page.` : `Invite saved. ${email} joins once they sign up and confirm their email.`,
       );
       setEmail("");
     } catch (err) {

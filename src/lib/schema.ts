@@ -77,6 +77,28 @@ BEGIN
     created_at   timestamptz NOT NULL DEFAULT now()
   );
   CREATE INDEX IF NOT EXISTS files_doc_idx ON files (document_id);
+
+  -- Account security. token_version is bumped to revoke every session issued before it.
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified boolean NOT NULL DEFAULT false;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version integer NOT NULL DEFAULT 0;
+
+  -- 6-digit email codes. Only a SHA-256 hash is stored; attempts caps wrong guesses.
+  CREATE TABLE IF NOT EXISTS email_codes (
+    user_id    uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    purpose    text NOT NULL,
+    code_hash  text NOT NULL,
+    attempts   integer NOT NULL DEFAULT 0,
+    expires_at timestamptz NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, purpose)
+  );
+
+  -- Fixed-window rate limits shared by every serverless instance.
+  CREATE TABLE IF NOT EXISTS rate_limits (
+    key      text PRIMARY KEY,
+    count    integer NOT NULL,
+    reset_at timestamptz NOT NULL
+  );
 END
 $$;
 `;

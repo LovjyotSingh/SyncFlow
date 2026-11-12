@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { cancelInvite, inviteByEmail, listMembers, removeMember, requireOwner, requirePage } from "@/lib/docs";
-import { HttpError, readJson, requireUser, route, type IdParams } from "@/lib/http";
+import { HttpError, rateLimit, readJson, requireUser, route, type IdParams } from "@/lib/http";
 
 export const GET = route<IdParams>(async (_req, { params }) => {
   const user = await requireUser();
@@ -15,6 +15,7 @@ export const POST = route<IdParams>(async (req, { params }) => {
   const user = await requireUser();
   const { id } = await params;
   await requirePage(id, user.id);
+  await rateLimit(req, "invite", 30, 60 * 60, user.id);
   const { email } = await readJson(req, Invite);
   if (email === user.email.toLowerCase()) throw new HttpError(400, "You're already on this page.");
   const result = await inviteByEmail(id, email, user.id);

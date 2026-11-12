@@ -2,14 +2,16 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AuthForm } from "@/components/auth/auth-form";
 import { AuthShell } from "@/components/auth/auth-shell";
-import { getSession } from "@/lib/auth";
+import { getSession, needsVerification } from "@/lib/auth";
+import { emailEnabled } from "@/lib/email";
 import { safeNext } from "@/lib/next-path";
 
 export const metadata: Metadata = { title: "Create an account" };
 
 export default async function SignupPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const next = safeNext((await searchParams).next);
-  if (await getSession()) redirect(next);
+  const user = await getSession();
+  if (user) redirect(needsVerification(user) ? `/verify?next=${encodeURIComponent(next)}` : next);
   return (
     <AuthShell
       title={
@@ -19,7 +21,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
       }
       subtitle="Create a free account. It takes ten seconds."
     >
-      <AuthForm mode="signup" next={next} />
+      <AuthForm mode="signup" next={next} emailCodes={emailEnabled()} />
     </AuthShell>
   );
 }

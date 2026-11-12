@@ -45,7 +45,15 @@ export async function api<T>(url: string, init?: RequestInit & { json?: unknown 
     headers: { ...(json !== undefined ? { "content-type": "application/json" } : {}), ...rest.headers },
     body: json !== undefined ? JSON.stringify(json) : rest.body,
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? `Request failed (${res.status}).`);
+  const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+  if (!res.ok) {
+    // The account still has to confirm its email: send them to enter the code.
+    if (data.code === "verify_email" && typeof window !== "undefined") {
+      // A plain helper, not a component, so it has no router; a full load also refreshes the session.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign(`/verify?next=${encodeURIComponent(window.location.pathname)}`);
+    }
+    throw new Error(data.error ?? `Request failed (${res.status}).`);
+  }
   return data as T;
 }

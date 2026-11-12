@@ -2,15 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { buttonClass } from "@/components/ui/button";
 import { Logo } from "@/components/ui/logo";
-import { getSession } from "@/lib/auth";
+import { requirePageUser } from "@/lib/auth";
 import { joinByToken } from "@/lib/docs";
 
 export const metadata = { title: "Join a page" };
 
 export default async function JoinPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const user = await getSession();
-  if (!user) redirect(`/login?next=${encodeURIComponent(`/join/${token}`)}`);
+  const user = await requirePageUser(`/join/${token}`);
 
   const id = await joinByToken(token, user.id);
   if (id) redirect(`/p/${id}`);

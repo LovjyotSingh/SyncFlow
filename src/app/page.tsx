@@ -125,7 +125,7 @@ export default async function Home() {
               />
               <Feature className="md:col-span-2" icon={<GitMerge />} title="Edits never collide" body="Yjs merges everyone's changes conflict-free. No locks, no “someone else is editing”." />
               <Feature className="md:col-span-2" icon={<Link2 />} title="Share by link" body="Anyone with the link joins after signing in. Reset it any time and old links stop working." />
-              <Feature className="md:col-span-2" icon={<MailPlus />} title="Invite by email" body="Invite someone before they have an account. They land on the page as soon as they sign up." />
+              <Feature className="md:col-span-2" icon={<MailPlus />} title="Invite by email" body="Invite someone before they have an account. They land on the page as soon as they sign up and confirm their email." />
               <Feature className="md:col-span-2" icon={<FileUp />} title="Files on the page" body="Drop images, PDFs and code up to 10 MB. Everyone on the page sees them instantly." />
               <Feature className="md:col-span-3" icon={<WifiOff />} title="Shrugs off bad Wi‑Fi" body="Edits queue up while you're offline and sync the moment you're back, in the right order." />
               <Feature className="md:col-span-3" icon={<Keyboard />} title="Keyboard-first" body="Press N for a new page, / for blocks, and use Markdown shortcuts like # and - as you type." />
